@@ -493,6 +493,83 @@ def rho_pi_destination(
         k_destination,
     )
 
+def chi(
+    state: NDArray[np.integer],
+) -> NDArray[np.int64]:
+    """
+    Aplica la transformación chi a un estado binario.
+
+    Para cada posición del estado:
+
+        output[x, y, k] =
+            state[x, y, k]
+            XOR
+            (
+                NOT state[(x + 1) mod 5, y, k]
+                AND state[(x + 2) mod 5, y, k]
+            )
+
+    Parameters
+    ----------
+    state:
+        Estado binario con forma ``(5, 5, z)``.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Estado binario después de aplicar chi.
+
+    Raises
+    ------
+    TypeError
+        Si el estado no es un arreglo NumPy.
+    ValueError
+        Si el estado no tiene forma válida o contiene valores
+        distintos de cero y uno.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La capa chi requiere un estado binario."
+        )
+
+    z = state.shape[2]
+
+    output = np.empty(
+        (5, 5, z),
+        dtype=np.int64,
+    )
+
+    input_state = state.astype(
+        np.int64,
+        copy=False,
+    )
+
+    for x in range(5):
+        next_x = (x + 1) % 5
+        next_next_x = (x + 2) % 5
+
+        for y in range(5):
+            current = input_state[x, y, :]
+            adjacent = input_state[next_x, y, :]
+            second_adjacent = input_state[
+                next_next_x,
+                y,
+                :,
+            ]
+
+            nonlinear_term = (
+                (1 - adjacent)
+                & second_adjacent
+            )
+
+            output[x, y, :] = (
+                current
+                ^ nonlinear_term
+            )
+
+    return output
 
 # ============================================================
 # UTILIDADES DE VALIDACIÓN

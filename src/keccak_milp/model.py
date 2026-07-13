@@ -33,6 +33,7 @@ ThetaColumnIndex: TypeAlias = tuple[int, int, int]
 ThetaBitIndex: TypeAlias = tuple[int, int, int, int]
 
 RhoPiBitIndex: TypeAlias = tuple[int, int, int, int]
+ChiBitIndex: TypeAlias = tuple[int, int, int, int]
 
 @dataclass(frozen=True)
 class ModelStatistics:
@@ -152,8 +153,27 @@ class KeccakMILPModel:
             pulp.LpVariable,
         ] = {}
 
+        # Variables de la capa chi.
+        self.chi_and: dict[
+            ChiBitIndex,
+            pulp.LpVariable,
+        ] = {}
+
+        self.chi_output: dict[
+            ChiBitIndex,
+            pulp.LpVariable,
+        ] = {}
+
+        self.chi_q: dict[
+            ChiBitIndex,
+            pulp.LpVariable,
+        ] = {}
+
         # Control de las rondas rho-pi ya agregadas.
         self._rho_pi_rounds_added: set[int] = set()
+
+        # Control de las rondas chi ya agregadas.
+        self._chi_rounds_added: set[int] = set()
 
         # Control de las rondas theta ya agregadas.
         self._theta_rounds_added: set[int] = set()
@@ -301,6 +321,69 @@ class KeccakMILPModel:
                             variable_name
                         )
 
+    def _create_chi_variables(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Crea las variables de la capa chi para una ronda.
+
+        Por cada bit se crean:
+
+        - una variable binaria para el término AND;
+        - una variable binaria de salida;
+        - una variable binaria de paridad para el XOR.
+
+        En total se crean:
+
+            3 × 25 × z
+
+        variables binarias por ronda.
+        """
+
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda chi debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    index = (
+                        round_index,
+                        x,
+                        y,
+                        k,
+                    )
+
+                    self.chi_and[index] = (
+                        self._create_binary_variable(
+                            name=(
+                                f"chi_and_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            )
+                        )
+                    )
+
+                    self.chi_output[index] = (
+                        self._create_binary_variable(
+                            name=(
+                                f"chi_output_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            )
+                        )
+                    )
+
+                    self.chi_q[index] = (
+                        self._create_binary_variable(
+                            name=(
+                                f"chi_q_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            )
+                        )
+                    )
+                    
     # ========================================================
     # ACCESO A VARIABLES
     # ========================================================
@@ -361,6 +444,158 @@ class KeccakMILPModel:
     # RESTRICCIÓN INICIAL
     # ========================================================
 
+    def _add_chi_constraints(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Agrega la formulación MILP de chi.
+
+        Para cada posición se define:
+
+            a = B[x, y, k]
+            b = B[(x + 1) mod 5, y, k]
+            c = B[(x + 2) mod 5, y, k]
+
+            t = (NOT b) AND c
+            d = a XOR t
+
+        El término AND se linealiza mediante:
+
+            t <= 1 - b
+            t <= c
+            t >= c - b
+
+        El XOR se representa mediante:
+
+            a + t = d + 2 q
+        """
+
+        for x in range(5):
+            next_x = (x + 1) % 5
+            second_next_x = (x + 2) % 5
+
+            for y in range(5):
+                for k in range(self.config.z):
+                    index = (
+                        round_index,
+                        x,
+                        y,
+                        k,
+                    )
+
+                    a_variable = self.rho_pi_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    b_variable = self.rho_pi_output_variable(
+                        round_index=round_index,
+                        x=next_x,
+                        y=y,
+                        k=k,
+                    )
+
+                    c_variable = self.rho_pi_output_variable(
+                        round_index=round_index,
+                        x=second_next_x,
+                        y=y,
+                        k=k,
+                    )
+
+                    and_variable = self.chi_and[index]
+                    output_variable = self.chi_output[index]
+                    parity_variable = self.chi_q[index]
+
+                    # t <= 1 - b
+                    self.problem += (
+                        and_variable <= 1 - b_variable,
+                        (
+                            f"chi_and_not_b_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+                    # t <= c
+                    self.problem += (
+                        and_variable <= c_variable,
+                        (
+                            f"chi_and_c_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+                    # t >= c - b
+                    self.problem += (
+                        and_variable >= c_variable - b_variable,
+                        (
+                            f"chi_and_lower_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+                    # a XOR t = d
+                    self.problem += (
+                        a_variable + and_variable
+                        == output_variable + 2 * parity_variable,
+                        (
+                            f"chi_xor_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+
+    def add_chi_layer(
+    self,
+    round_index: int,
+    ) -> None:
+        """
+        Agrega la capa chi después de rho y pi.
+
+        Requiere que las capas rho y pi de la misma ronda ya existan.
+        La operación es idempotente.
+        """
+
+        if round_index in self._chi_rounds_added:
+            return
+
+        if round_index not in self._rho_pi_rounds_added:
+            raise RuntimeError(
+                "Deben agregarse rho y pi antes de chi para la "
+                f"ronda {round_index}."
+            )
+
+        self._create_chi_variables(round_index)
+        self._add_chi_constraints(round_index)
+
+        self._chi_rounds_added.add(round_index)
+        
+    def chi_output_variable(
+        self,
+        round_index: int,
+        x: int,
+        y: int,
+        k: int,
+    ) -> pulp.LpVariable:
+        """Devuelve una variable de salida de chi."""
+
+        index = (
+            round_index,
+            x,
+            y,
+            k,
+        )
+
+        if index not in self.chi_output:
+            raise KeyError(
+                "La variable chi solicitada no existe. "
+                "Ejecuta add_chi_layer() primero."
+            )
+
+        return self.chi_output[index]
+                    
     def _add_rho_pi_constraints(
         self,
         round_index: int,
@@ -408,6 +643,47 @@ class KeccakMILPModel:
                             f"_x{x}_y{y}_k{k}"
                         ),
                     )
+
+    def chi_output_values(
+        self,
+        round_index: int,
+        tolerance: float = 0.5,
+    ) -> list[list[list[int]]]:
+        """
+        Recupera la salida de chi como una estructura 5 × 5 × z.
+        """
+
+        output = [
+            [
+                [0 for _ in range(self.config.z)]
+                for _ in range(5)
+            ]
+            for _ in range(5)
+        ]
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    variable = self.chi_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    value = variable.value()
+
+                    if value is None:
+                        raise RuntimeError(
+                            "El modelo debe resolverse antes de "
+                            "recuperar la salida chi."
+                        )
+
+                    output[x][y][k] = int(
+                        value > tolerance
+                    )
+
+        return output
 
     def add_nonzero_input_constraint(self) -> None:
         """
@@ -1052,6 +1328,9 @@ class KeccakMILPModel:
             + len(self.theta_output)
             + len(self.theta_qt)
             + len(self.rho_pi_output)
+            + len(self.chi_and)
+            + len(self.chi_output)
+            + len(self.chi_q)
         )
     
 
