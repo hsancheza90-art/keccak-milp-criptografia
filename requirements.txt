@@ -1,0 +1,7 @@
+numpy
+pandas
+matplotlib
+pulp
+ipykernel
+pytest
+tqdm

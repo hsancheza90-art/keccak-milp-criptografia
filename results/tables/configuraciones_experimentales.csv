@@ -1,0 +1,7 @@
+﻿experimento,z,bits_estado,rondas,intentos_referenciales,sboxes_por_ronda,sboxes_disponibles,solver,limite_tiempo_segundos,mip_gap
+E1,4,100,1,menos de 10,20,20,CBC,300,0.0
+E2,4,100,2,menos de 20,20,40,CBC,300,0.0
+E3,4,100,3,menos de 30,20,60,CBC,300,0.0
+E4,8,200,1,menos de 10,40,40,CBC,300,0.0
+E5,8,200,2,menos de 20,40,80,CBC,300,0.0
+E6,8,200,3,menos de 30,40,120,CBC,300,0.0
