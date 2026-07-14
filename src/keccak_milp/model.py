@@ -184,6 +184,9 @@ class KeccakMILPModel:
         # Control de las rondas theta ya agregadas.
         self._theta_rounds_added: set[int] = set()
 
+        # Control de rondas completas ya agregadas.
+        self._rounds_added: set[int] = set()
+
         self._nonzero_input_added = False
         self._objective_added = False
 
@@ -570,6 +573,52 @@ class KeccakMILPModel:
                     )
 
         return output
+
+    def add_round(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Agrega una ronda completa de Keccak al modelo.
+
+        El orden de construcción es:
+
+            theta -> rho-pi -> chi -> iota
+
+        La salida de la ronda queda conectada con el estado de
+        frontera ``round_index + 1``.
+
+        La operación es idempotente.
+        """
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        if round_index in self._rounds_added:
+            return
+
+        self.add_theta_layer(round_index)
+        self.add_rho_pi_layers(round_index)
+        self.add_chi_layer(round_index)
+        self.add_iota_layer(round_index)
+
+        self._rounds_added.add(round_index)
+
+    def add_all_rounds(self) -> None:
+        """
+        Agrega todas las rondas configuradas en orden consecutivo.
+
+        Para ``rounds = R`` se construyen las rondas:
+
+            0, 1, ..., R - 1
+        """
+        for round_index in range(
+            self.config.rounds
+        ):
+            self.add_round(round_index)
+
 
     # ========================================================
     # ACCESO A VARIABLES

@@ -725,6 +725,139 @@ def iota(
 
     return output
 
+def keccak_round(
+    state: NDArray[np.integer],
+    round_index: int,
+) -> NDArray[np.int64]:
+    """
+    Aplica una ronda completa de Keccak reducido.
+
+    El orden de las transformaciones es:
+
+        theta -> rho -> pi -> chi -> iota
+
+    Parameters
+    ----------
+    state:
+        Estado binario con forma ``(5, 5, z)``.
+
+    round_index:
+        Índice de la ronda y de su constante Iota.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Estado resultante después de una ronda completa.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La ronda de Keccak requiere un estado binario."
+        )
+
+    output = theta(
+        state.astype(
+            np.int64,
+            copy=True,
+        )
+    )
+
+    output = rho_pi(output)
+    output = chi(output)
+
+    output = iota(
+        output,
+        round_index=round_index,
+    )
+
+    return output
+
+def keccak_rounds(
+    state: NDArray[np.integer],
+    number_of_rounds: int,
+    start_round: int = 0,
+) -> NDArray[np.int64]:
+    """
+    Aplica varias rondas consecutivas de Keccak reducido.
+
+    Parameters
+    ----------
+    state:
+        Estado binario inicial con forma ``(5, 5, z)``.
+
+    number_of_rounds:
+        Número de rondas que se aplicarán.
+
+    start_round:
+        Índice de la primera constante de ronda.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Estado después de aplicar las rondas solicitadas.
+
+    Raises
+    ------
+    TypeError
+        Si los índices no son enteros.
+
+    ValueError
+        Si la cantidad de rondas o el intervalo solicitado
+        no son válidos.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "Las rondas de Keccak requieren un estado binario."
+        )
+
+    if not isinstance(number_of_rounds, int):
+        raise TypeError(
+            "El número de rondas debe ser un entero."
+        )
+
+    if not isinstance(start_round, int):
+        raise TypeError(
+            "La ronda inicial debe ser un entero."
+        )
+
+    if number_of_rounds < 0:
+        raise ValueError(
+            "El número de rondas no puede ser negativo."
+        )
+
+    if start_round < 0:
+        raise ValueError(
+            "La ronda inicial no puede ser negativa."
+        )
+
+    final_round = start_round + number_of_rounds
+
+    if final_round > len(ROUND_CONSTANTS_64):
+        raise ValueError(
+            "El intervalo solicitado excede las constantes "
+            "de ronda disponibles."
+        )
+
+    output = state.astype(
+        np.int64,
+        copy=True,
+    )
+
+    for round_index in range(
+        start_round,
+        final_round,
+    ):
+        output = keccak_round(
+            output,
+            round_index=round_index,
+        )
+
+    return output
+
+
 # ============================================================
 # UTILIDADES DE VALIDACIÓN
 # ============================================================
