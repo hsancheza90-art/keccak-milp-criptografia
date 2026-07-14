@@ -969,6 +969,145 @@ class KeccakMILPModel:
 
         self._objective_added = True
 
+    def set_boundary_hamming_weight_objective(
+        self,
+        boundary_index: int,
+    ) -> None:
+        """
+        Minimiza el peso de Hamming de un estado de frontera.
+
+        El objetivo se define como:
+
+            sum_{x,y,k} state[boundary_index, x, y, k]
+
+        Parameters
+        ----------
+        boundary_index:
+            Índice del estado de frontera. Debe encontrarse entre
+            0 y config.rounds, ambos inclusive.
+
+        Raises
+        ------
+        TypeError
+            Si el índice no es entero.
+
+        ValueError
+            Si el índice no corresponde a un estado de frontera.
+        """
+        if not isinstance(boundary_index, int):
+            raise TypeError(
+                "El índice del estado de frontera debe ser un entero."
+            )
+
+        if boundary_index not in range(
+            self.config.rounds + 1
+        ):
+            raise ValueError(
+                "El estado de frontera debe encontrarse entre 0 y "
+                f"{self.config.rounds}."
+            )
+
+        objective = pulp.lpSum(
+            self.state[
+                boundary_index,
+                x,
+                y,
+                k,
+            ]
+            for x in range(5)
+            for y in range(5)
+            for k in range(self.config.z)
+        )
+
+        self.problem.setObjective(
+            objective
+        )
+
+        self._objective_added = True
+
+    def set_input_output_hamming_weight_objective(
+        self,
+    ) -> None:
+        """
+        Minimiza la suma de los pesos de Hamming de la entrada y
+        del estado de frontera final.
+
+        El objetivo es:
+
+            HW(A_0) + HW(A_R)
+
+        donde R es el número de rondas configurado.
+        """
+        final_boundary = self.config.rounds
+
+        input_weight = pulp.lpSum(
+            self.state[
+                0,
+                x,
+                y,
+                k,
+            ]
+            for x in range(5)
+            for y in range(5)
+            for k in range(self.config.z)
+        )
+
+        output_weight = pulp.lpSum(
+            self.state[
+                final_boundary,
+                x,
+                y,
+                k,
+            ]
+            for x in range(5)
+            for y in range(5)
+            for k in range(self.config.z)
+        )
+
+        self.problem.setObjective(
+            input_weight + output_weight
+        )
+
+        self._objective_added = True
+        
+
+    def objective_value(self) -> float:
+        """
+        Devuelve el valor de la función objetivo después de resolver.
+
+        Raises
+        ------
+        RuntimeError
+            Si el modelo no tiene función objetivo o todavía no ha
+            sido resuelto.
+        """
+        if (
+            not self._objective_added
+            or self.problem.objective is None
+        ):
+            raise RuntimeError(
+                "El modelo no tiene una función objetivo."
+            )
+
+        if self.problem.status == pulp.LpStatusNotSolved:
+            raise RuntimeError(
+                "El modelo debe resolverse antes de recuperar "
+                "el valor objetivo."
+            )
+
+        result = pulp.value(
+            self.problem.objective
+        )
+
+        if result is None:
+            raise RuntimeError(
+                "No fue posible recuperar el valor de la "
+                "función objetivo."
+            )
+
+        return float(result)
+
+        
     # ========================================================
     # VARIABLES DE THETA
     # ========================================================
@@ -1496,16 +1635,6 @@ class KeccakMILPModel:
     # ========================================================
     # RESULTADOS
     # ========================================================
-
-    def objective_value(self) -> float | None:
-        """Devuelve el valor de la función objetivo."""
-
-        value = pulp.value(self.problem.objective)
-
-        if value is None:
-            return None
-
-        return float(value)
 
     def active_initial_positions(
         self,
