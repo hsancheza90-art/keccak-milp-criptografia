@@ -19,7 +19,10 @@ from typing import TypeAlias
 import pulp
 
 from keccak_milp.config import ExperimentConfig
-from keccak_milp.layers import rho_pi_destination
+from keccak_milp.layers import (
+    rho_pi_destination,
+    round_constant,
+)
 from keccak_milp.solver import build_solver
 
 
@@ -174,6 +177,9 @@ class KeccakMILPModel:
 
         # Control de las rondas chi ya agregadas.
         self._chi_rounds_added: set[int] = set()
+
+        # Control de las rondas iota ya agregadas.
+        self._iota_rounds_added: set[int] = set()
 
         # Control de las rondas theta ya agregadas.
         self._theta_rounds_added: set[int] = set()
@@ -383,7 +389,188 @@ class KeccakMILPModel:
                             )
                         )
                     )
-                    
+
+    def _add_iota_constraints(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Conecta la salida de chi con el siguiente estado de frontera.
+
+        Para todos los lanes distintos de (0, 0):
+
+            A[r + 1, x, y, k] = Chi[r, x, y, k]
+
+        Para el lane (0, 0):
+
+            A[r + 1, 0, 0, k]
+            =
+            Chi[r, 0, 0, k] XOR RC[r, k]
+
+        Como RC[r, k] es una constante:
+
+        - si RC[r, k] = 0, se agrega una igualdad directa;
+        - si RC[r, k] = 1, se agrega:
+
+            A[r + 1, 0, 0, k]
+            =
+            1 - Chi[r, 0, 0, k]
+        """
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda iota debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        constant = round_constant(
+            round_index=round_index,
+            z=self.config.z,
+        )
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    chi_variable = self.chi_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    next_state_variable = self.state_variable(
+                        round_index=round_index + 1,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    constant_bit = 0
+
+                    if x == 0 and y == 0:
+                        constant_bit = (
+                            constant >> k
+                        ) & 1
+
+                    if constant_bit == 0:
+                        self.problem += (
+                            next_state_variable
+                            == chi_variable,
+                            (
+                                f"iota_equal_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            ),
+                        )
+                    else:
+                        self.problem += (
+                            next_state_variable
+                            == 1 - chi_variable,
+                            (
+                                f"iota_toggle_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            ),
+                        )
+
+
+    def add_iota_layer(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Agrega la capa iota después de chi.
+
+        La salida de iota se conecta directamente con el estado de
+        frontera de la ronda siguiente.
+
+        Requiere que chi de la misma ronda ya exista.
+        La operación es idempotente.
+        """
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda iota debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        if round_index in self._iota_rounds_added:
+            return
+
+        if round_index not in self._chi_rounds_added:
+            raise RuntimeError(
+                "Debe agregarse chi antes de iota para la "
+                f"ronda {round_index}."
+            )
+
+        self._add_iota_constraints(round_index)
+
+        self._iota_rounds_added.add(round_index)
+
+    def iota_output_variable(
+        self,
+        round_index: int,
+        x: int,
+        y: int,
+        k: int,
+    ) -> pulp.LpVariable:
+        """
+        Devuelve una variable de salida de iota.
+
+        La salida de iota de la ronda r corresponde al estado de
+        frontera r + 1.
+        """
+        if round_index not in self._iota_rounds_added:
+            raise KeyError(
+                "La variable iota solicitada no existe. "
+                "Ejecuta add_iota_layer() primero."
+            )
+
+        return self.state_variable(
+            round_index=round_index + 1,
+            x=x,
+            y=y,
+            k=k,
+        )
+
+    def iota_output_values(
+        self,
+        round_index: int,
+        tolerance: float = 0.5,
+    ) -> list[list[list[int]]]:
+        """
+        Recupera la salida de iota como una estructura 5 × 5 × z.
+
+        La salida corresponde al estado de frontera r + 1.
+        """
+        output = [
+            [
+                [0 for _ in range(self.config.z)]
+                for _ in range(5)
+            ]
+            for _ in range(5)
+        ]
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    variable = self.iota_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    value = variable.value()
+
+                    if value is None:
+                        raise RuntimeError(
+                            "El modelo debe resolverse antes de "
+                            "recuperar la salida iota."
+                        )
+
+                    output[x][y][k] = int(
+                        value > tolerance
+                    )
+
+        return output
+
     # ========================================================
     # ACCESO A VARIABLES
     # ========================================================

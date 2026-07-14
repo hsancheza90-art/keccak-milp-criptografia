@@ -53,6 +53,94 @@ RHO_OFFSETS: tuple[tuple[int, ...], ...] = (
     (27, 20, 39, 8, 14),
 )
 
+# ============================================================
+# CONSTANTES DE RONDA DE KECCAK
+# ============================================================
+
+ROUND_CONSTANTS_64: tuple[int, ...] = (
+    0x0000000000000001,
+    0x0000000000008082,
+    0x800000000000808A,
+    0x8000000080008000,
+    0x000000000000808B,
+    0x0000000080000001,
+    0x8000000080008081,
+    0x8000000000008009,
+    0x000000000000008A,
+    0x0000000000000088,
+    0x0000000080008009,
+    0x000000008000000A,
+    0x000000008000808B,
+    0x800000000000008B,
+    0x8000000000008089,
+    0x8000000000008003,
+    0x8000000000008002,
+    0x8000000000000080,
+    0x000000000000800A,
+    0x800000008000000A,
+    0x8000000080008081,
+    0x8000000000008080,
+    0x0000000080000001,
+    0x8000000080008008,
+)
+
+def round_constant(
+    round_index: int,
+    z: int,
+) -> int:
+    """
+    Devuelve la constante de una ronda truncada a z bits.
+
+    Parameters
+    ----------
+    round_index:
+        Índice de la constante de ronda, entre 0 y 23.
+
+    z:
+        Longitud del lane en bits. Debe encontrarse entre 1 y 64.
+
+    Returns
+    -------
+    int
+        Constante de ronda limitada a los z bits menos
+        significativos.
+
+    Raises
+    ------
+    TypeError
+        Si los parámetros no son enteros.
+
+    ValueError
+        Si el índice o la longitud del lane no son válidos.
+    """
+    if not isinstance(round_index, int):
+        raise TypeError(
+            "El índice de ronda debe ser un entero."
+        )
+
+    if not isinstance(z, int):
+        raise TypeError(
+            "La longitud del lane z debe ser un entero."
+        )
+
+    if round_index not in range(
+        len(ROUND_CONSTANTS_64)
+    ):
+        raise ValueError(
+            "El índice de ronda debe encontrarse entre 0 y "
+            f"{len(ROUND_CONSTANTS_64) - 1}."
+        )
+
+    if z not in range(1, 65):
+        raise ValueError(
+            "La longitud del lane z debe encontrarse "
+            "entre 1 y 64."
+        )
+
+    mask = (1 << z) - 1
+
+    return ROUND_CONSTANTS_64[round_index] & mask
+
 
 # ============================================================
 # VALIDACIÓN DEL ESTADO
@@ -568,6 +656,72 @@ def chi(
                 current
                 ^ nonlinear_term
             )
+
+    return output
+
+def iota(
+    state: NDArray[np.integer],
+    round_index: int,
+) -> NDArray[np.int64]:
+    """
+    Aplica la transformación iota a un estado binario.
+
+    Iota modifica únicamente el lane (0, 0):
+
+        output[0, 0] =
+            state[0, 0] XOR RC[round_index]
+
+    La constante se trunca automáticamente a la longitud
+    z del lane.
+
+    Parameters
+    ----------
+    state:
+        Estado binario con forma ``(5, 5, z)``.
+
+    round_index:
+        Índice de la constante de ronda.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Copia del estado después de aplicar iota.
+
+    Raises
+    ------
+    TypeError
+        Si el estado no es un arreglo NumPy o el índice no
+        es entero.
+
+    ValueError
+        Si el estado tiene forma inválida, no es binario o
+        el índice de ronda no es válido.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La capa iota requiere un estado binario."
+        )
+
+    z = state.shape[2]
+
+    constant = round_constant(
+        round_index=round_index,
+        z=z,
+    )
+
+    output = state.astype(
+        np.int64,
+        copy=True,
+    )
+
+    for k in range(z):
+        constant_bit = (
+            constant >> k
+        ) & 1
+
+        output[0, 0, k] ^= constant_bit
 
     return output
 
