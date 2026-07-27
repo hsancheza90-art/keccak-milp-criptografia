@@ -1,0 +1,219 @@
+\documentclass[11pt,a4paper]{article}
+
+% ============================================================
+% Idioma, codificación y tipografía
+% ============================================================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{csquotes}
+
+\addto\captionsspanish{
+    \renewcommand{\tablename}{Tabla}
+    \renewcommand{\refname}{Referencias}
+}
+
+% ============================================================
+% Configuración de página
+% ============================================================
+\usepackage[
+    top=2.35cm,
+    bottom=2.35cm,
+    left=2.55cm,
+    right=2.55cm
+]{geometry}
+
+\usepackage{setspace}
+\setstretch{1.06}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.52em}
+
+% ============================================================
+% Matemática
+% ============================================================
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+
+\newcommand{\Nact}[2]{N_{\mathrm{act}}^{\min}(#1,#2)}
+\newcommand{\DeltaA}{\Delta A}
+\newcommand{\DeltaB}{\Delta B}
+\newcommand{\GF}{\mathrm{GF}(2)}
+
+% ============================================================
+% Tablas, figuras y control de saltos
+% ============================================================
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{needspace}
+
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    justification=centering
+}
+
+% ============================================================
+% Listas
+% ============================================================
+\usepackage{enumitem}
+
+\setlist[itemize]{
+    leftmargin=1.45em,
+    itemsep=0.20em,
+    topsep=0.25em
+}
+
+\setlist[enumerate]{
+    leftmargin=1.65em,
+    itemsep=0.20em,
+    topsep=0.25em
+}
+
+% ============================================================
+% Colores y bloques de código
+% ============================================================
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{grisclaro}{RGB}{246,246,246}
+\definecolor{grisborde}{RGB}{190,190,190}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{grisclaro},
+    frame=single,
+    rulecolor=\color{grisborde},
+    breaklines=true,
+    showstringspaces=false,
+    columns=fullflexible,
+    keepspaces=true,
+    xleftmargin=0.4em,
+    xrightmargin=0.4em,
+    aboveskip=0.7em,
+    belowskip=0.7em
+}
+
+% ============================================================
+% Diagramas
+% ============================================================
+\usepackage{tikz}
+\usetikzlibrary{
+    positioning,
+    arrows.meta,
+    shapes.geometric
+}
+
+% ============================================================
+% Enlaces y metadatos
+% ============================================================
+\usepackage[hidelinks]{hyperref}
+\urlstyle{same}
+
+\hypersetup{
+    pdftitle={
+        Modelado MILP de Keccak reducido para la minimización
+        de S-boxes activas
+    },
+    pdfauthor={Henry Sánchez Alvarado},
+    pdfsubject={
+        Criptoanálisis, Programación Lineal Entera Mixta y Keccak
+    },
+    pdfkeywords={
+        Keccak, MILP, CBC, PuLP, S-boxes activas, criptoanálisis
+    }
+}
+
+% ============================================================
+% Bibliografía
+% ============================================================
+\usepackage[
+    backend=biber,
+    style=numeric,
+    sorting=none,
+    giveninits=true,
+    maxbibnames=20
+]{biblatex}
+
+\addbibresource{references.bib}
+
+% ============================================================
+% Datos del artículo
+% ============================================================
+\title{
+    \textbf{
+        Modelado MILP de Keccak reducido para la minimización
+        de S-boxes activas
+    }
+}
+
+\author{
+    Henry Sánchez Alvarado\\[0.35em]
+    \small MCC640B Tópicos Especiales IV:
+    Criptoanálisis, Codificación y Seguridad\\
+    \small Profesor: Manuel Alejandro Quispe Torres\\
+    \small Maestría en Ciencias de la Computación\\
+    \small Universidad Nacional de Ingeniería
+}
+
+\date{Julio de 2026}
+
+% ============================================================
+% Documento
+% ============================================================
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este trabajo presenta un modelo de Programación Lineal Entera Mixta
+(MILP) para estudiar el número mínimo de aplicaciones activas de la
+capa no lineal $\chi$ en versiones reducidas de Keccak. La formulación
+representa bit a bit dos ejecuciones de la permutación y calcula sus
+diferencias mediante restricciones XOR exactas. Se analizan tamaños de
+palabra $z=4$ y $z=8$, correspondientes a estados de 100 y 200 bits y
+a 20 y 40 aplicaciones locales de $\chi$ por ronda, respectivamente.
+
+El modelo se implementó en Python con PuLP y se resolvió mediante CBC.
+Para una ronda se certificó un mínimo global de una S-box activa, mientras
+que para dos rondas se demostró un mínimo global de cuatro, con distribución
+$2+2$. Para tres rondas se obtuvo la cota inferior global de cinco y se
+construyeron testigos con actividades $2+2+9$ para $z=4$ y $2+2+10$
+para $z=8$. Estos últimos valores son óptimos dentro de la familia
+restringida $2+2+c$ y establecen las cotas superiores globales 13 y 14,
+pero no mínimos globales de tres rondas.
+
+Los resultados se validaron mediante una implementación funcional
+independiente, reconstrucción de testigos y pruebas automatizadas.
+\end{abstract}
+
+\noindent\textbf{Palabras clave:} Keccak, programación lineal entera mixta,
+criptoanálisis diferencial, S-boxes activas, PuLP, CBC.
+
+% ============================================================
+% Secciones
+% ============================================================
+\input{sections/01_introduccion}
+\input{sections/02_keccak_reducido}
+\input{sections/03_formulacion_milp}
+\input{sections/04_implementacion}
+\input{sections/05_metodologia_experimental}
+\input{sections/06_resultados}
+\input{sections/07_reproducibilidad}
+\input{sections/08_limitaciones}
+\input{sections/09_conclusiones}
+\input{sections/10_disponibilidad_codigo}
+
+% ============================================================
+% Referencias
+% ============================================================
+\printbibliography[title={Referencias}]
+
+\end{document}

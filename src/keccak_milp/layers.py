@@ -53,6 +53,94 @@ RHO_OFFSETS: tuple[tuple[int, ...], ...] = (
     (27, 20, 39, 8, 14),
 )
 
+# ============================================================
+# CONSTANTES DE RONDA DE KECCAK
+# ============================================================
+
+ROUND_CONSTANTS_64: tuple[int, ...] = (
+    0x0000000000000001,
+    0x0000000000008082,
+    0x800000000000808A,
+    0x8000000080008000,
+    0x000000000000808B,
+    0x0000000080000001,
+    0x8000000080008081,
+    0x8000000000008009,
+    0x000000000000008A,
+    0x0000000000000088,
+    0x0000000080008009,
+    0x000000008000000A,
+    0x000000008000808B,
+    0x800000000000008B,
+    0x8000000000008089,
+    0x8000000000008003,
+    0x8000000000008002,
+    0x8000000000000080,
+    0x000000000000800A,
+    0x800000008000000A,
+    0x8000000080008081,
+    0x8000000000008080,
+    0x0000000080000001,
+    0x8000000080008008,
+)
+
+def round_constant(
+    round_index: int,
+    z: int,
+) -> int:
+    """
+    Devuelve la constante de una ronda truncada a z bits.
+
+    Parameters
+    ----------
+    round_index:
+        Índice de la constante de ronda, entre 0 y 23.
+
+    z:
+        Longitud del lane en bits. Debe encontrarse entre 1 y 64.
+
+    Returns
+    -------
+    int
+        Constante de ronda limitada a los z bits menos
+        significativos.
+
+    Raises
+    ------
+    TypeError
+        Si los parámetros no son enteros.
+
+    ValueError
+        Si el índice o la longitud del lane no son válidos.
+    """
+    if not isinstance(round_index, int):
+        raise TypeError(
+            "El índice de ronda debe ser un entero."
+        )
+
+    if not isinstance(z, int):
+        raise TypeError(
+            "La longitud del lane z debe ser un entero."
+        )
+
+    if round_index not in range(
+        len(ROUND_CONSTANTS_64)
+    ):
+        raise ValueError(
+            "El índice de ronda debe encontrarse entre 0 y "
+            f"{len(ROUND_CONSTANTS_64) - 1}."
+        )
+
+    if z not in range(1, 65):
+        raise ValueError(
+            "La longitud del lane z debe encontrarse "
+            "entre 1 y 64."
+        )
+
+    mask = (1 << z) - 1
+
+    return ROUND_CONSTANTS_64[round_index] & mask
+
 
 # ============================================================
 # VALIDACIÓN DEL ESTADO
@@ -492,6 +580,282 @@ def rho_pi_destination(
         y_destination,
         k_destination,
     )
+
+def chi(
+    state: NDArray[np.integer],
+) -> NDArray[np.int64]:
+    """
+    Aplica la transformación chi a un estado binario.
+
+    Para cada posición del estado:
+
+        output[x, y, k] =
+            state[x, y, k]
+            XOR
+            (
+                NOT state[(x + 1) mod 5, y, k]
+                AND state[(x + 2) mod 5, y, k]
+            )
+
+    Parameters
+    ----------
+    state:
+        Estado binario con forma ``(5, 5, z)``.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Estado binario después de aplicar chi.
+
+    Raises
+    ------
+    TypeError
+        Si el estado no es un arreglo NumPy.
+    ValueError
+        Si el estado no tiene forma válida o contiene valores
+        distintos de cero y uno.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La capa chi requiere un estado binario."
+        )
+
+    z = state.shape[2]
+
+    output = np.empty(
+        (5, 5, z),
+        dtype=np.int64,
+    )
+
+    input_state = state.astype(
+        np.int64,
+        copy=False,
+    )
+
+    for x in range(5):
+        next_x = (x + 1) % 5
+        next_next_x = (x + 2) % 5
+
+        for y in range(5):
+            current = input_state[x, y, :]
+            adjacent = input_state[next_x, y, :]
+            second_adjacent = input_state[
+                next_next_x,
+                y,
+                :,
+            ]
+
+            nonlinear_term = (
+                (1 - adjacent)
+                & second_adjacent
+            )
+
+            output[x, y, :] = (
+                current
+                ^ nonlinear_term
+            )
+
+    return output
+
+def iota(
+    state: NDArray[np.integer],
+    round_index: int,
+) -> NDArray[np.int64]:
+    """
+    Aplica la transformación iota a un estado binario.
+
+    Iota modifica únicamente el lane (0, 0):
+
+        output[0, 0] =
+            state[0, 0] XOR RC[round_index]
+
+    La constante se trunca automáticamente a la longitud
+    z del lane.
+
+    Parameters
+    ----------
+    state:
+        Estado binario con forma ``(5, 5, z)``.
+
+    round_index:
+        Índice de la constante de ronda.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Copia del estado después de aplicar iota.
+
+    Raises
+    ------
+    TypeError
+        Si el estado no es un arreglo NumPy o el índice no
+        es entero.
+
+    ValueError
+        Si el estado tiene forma inválida, no es binario o
+        el índice de ronda no es válido.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La capa iota requiere un estado binario."
+        )
+
+    z = state.shape[2]
+
+    constant = round_constant(
+        round_index=round_index,
+        z=z,
+    )
+
+    output = state.astype(
+        np.int64,
+        copy=True,
+    )
+
+    for k in range(z):
+        constant_bit = (
+            constant >> k
+        ) & 1
+
+        output[0, 0, k] ^= constant_bit
+
+    return output
+
+def keccak_round(
+    state: NDArray[np.integer],
+    round_index: int,
+) -> NDArray[np.int64]:
+    """
+    Aplica una ronda completa de Keccak reducido.
+
+    El orden de las transformaciones es:
+
+        theta -> rho -> pi -> chi -> iota
+
+    Parameters
+    ----------
+    state:
+        Estado binario con forma ``(5, 5, z)``.
+
+    round_index:
+        Índice de la ronda y de su constante Iota.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Estado resultante después de una ronda completa.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La ronda de Keccak requiere un estado binario."
+        )
+
+    output = theta(
+        state.astype(
+            np.int64,
+            copy=True,
+        )
+    )
+
+    output = rho_pi(output)
+    output = chi(output)
+
+    output = iota(
+        output,
+        round_index=round_index,
+    )
+
+    return output
+
+def keccak_rounds(
+    state: NDArray[np.integer],
+    number_of_rounds: int,
+    start_round: int = 0,
+) -> NDArray[np.int64]:
+    """
+    Aplica varias rondas consecutivas de Keccak reducido.
+
+    Parameters
+    ----------
+    state:
+        Estado binario inicial con forma ``(5, 5, z)``.
+
+    number_of_rounds:
+        Número de rondas que se aplicarán.
+
+    start_round:
+        Índice de la primera constante de ronda.
+
+    Returns
+    -------
+    NDArray[np.int64]
+        Estado después de aplicar las rondas solicitadas.
+
+    Raises
+    ------
+    TypeError
+        Si los índices no son enteros.
+
+    ValueError
+        Si la cantidad de rondas o el intervalo solicitado
+        no son válidos.
+    """
+    validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "Las rondas de Keccak requieren un estado binario."
+        )
+
+    if not isinstance(number_of_rounds, int):
+        raise TypeError(
+            "El número de rondas debe ser un entero."
+        )
+
+    if not isinstance(start_round, int):
+        raise TypeError(
+            "La ronda inicial debe ser un entero."
+        )
+
+    if number_of_rounds < 0:
+        raise ValueError(
+            "El número de rondas no puede ser negativo."
+        )
+
+    if start_round < 0:
+        raise ValueError(
+            "La ronda inicial no puede ser negativa."
+        )
+
+    final_round = start_round + number_of_rounds
+
+    if final_round > len(ROUND_CONSTANTS_64):
+        raise ValueError(
+            "El intervalo solicitado excede las constantes "
+            "de ronda disponibles."
+        )
+
+    output = state.astype(
+        np.int64,
+        copy=True,
+    )
+
+    for round_index in range(
+        start_round,
+        final_round,
+    ):
+        output = keccak_round(
+            output,
+            round_index=round_index,
+        )
+
+    return output
 
 
 # ============================================================

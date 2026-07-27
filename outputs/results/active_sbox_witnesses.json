@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "mode": "quick",
+  "experiments": {
+    "z4_rounds3": {
+      "z": 4,
+      "trail_count": 200,
+      "realizations_per_trail": 1024,
+      "evaluated_realizations": 204800,
+      "minimum_round_2_activity": 9,
+      "minimum_total_activity": 13,
+      "best_candidate_count": 512,
+      "support_round_0": [
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "beta_round_0": [
+        1,
+        1
+      ],
+      "support_round_1": [
+        [
+          1,
+          3
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "left_values_round_1": [
+        2,
+        8
+      ],
+      "support_round_2": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "delta_b2_hamming_weight": 12
+    },
+    "z8_rounds3": {
+      "z": 8,
+      "trail_count": 400,
+      "realizations_per_trail": 1024,
+      "evaluated_realizations": 409600,
+      "minimum_round_2_activity": 10,
+      "minimum_total_activity": 14,
+      "best_candidate_count": 512,
+      "support_round_0": [
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "beta_round_0": [
+        2,
+        2
+      ],
+      "support_round_1": [
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          2
+        ]
+      ],
+      "left_values_round_1": [
+        2,
+        0
+      ],
+      "support_round_2": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          5
+        ],
+        [
+          1,
+          7
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "delta_b2_hamming_weight": 13
+    }
+  }
+}

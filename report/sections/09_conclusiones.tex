@@ -1,0 +1,271 @@
+﻿\section{Conclusiones}
+\label{sec:conclusiones}
+
+Este trabajo desarrolló un modelo de Programación Lineal Entera Mixta para
+estudiar el número mínimo de aplicaciones activas de la capa no lineal
+$\chi$ en versiones reducidas de Keccak.
+
+La formulación representa bit a bit dos ejecuciones simultáneas de la
+permutación y calcula sus diferencias mediante restricciones XOR exactas.
+Las transformaciones $\theta$, $\rho$, $\pi$, $\chi$ e $\iota$ se modelaron
+de acuerdo con la estructura de una ronda de Keccak, mientras que las
+variables binarias $a_{r,y,k}$ permitieron identificar y minimizar la
+actividad de cada aplicación local de $\chi$.
+
+El modelo se aplicó a tamaños de palabra
+
+\[
+z\in\{4,8\},
+\]
+
+correspondientes a estados de 100 y 200 bits y a 20 y 40 aplicaciones
+locales de $\chi$ por ronda, respectivamente. Los experimentos consideraron
+una, dos y tres rondas.
+
+
+\subsection{Respuesta al objetivo del trabajo}
+\label{subsec:respuesta_objetivo}
+
+El objetivo principal consistía en modelar Keccak reducido mediante MILP
+y determinar o acotar el número mínimo de S-boxes activas para diferentes
+tamaños de palabra y números de rondas.
+
+La implementación desarrollada responde a este objetivo mediante:
+
+\begin{itemize}
+    \item una representación exacta de las transformaciones de Keccak;
+    \item dos ejecuciones simultáneas para calcular diferencias XOR;
+    \item variables binarias para identificar las S-boxes activas;
+    \item una función objetivo que minimiza la actividad total;
+    \item problemas auxiliares de factibilidad para establecer cotas;
+    \item testigos concretos reconstruibles mediante una implementación
+    funcional independiente.
+\end{itemize}
+
+La correspondencia entre intentos y rondas se utilizó únicamente como
+criterio experimental. No se interpretó como una modificación interna de
+Keccak ni como una relación criptográfica demostrada entre intentos de un
+atacante y profundidad de la permutación.
+
+
+\subsection{Resultados principales}
+\label{subsec:conclusiones_resultados}
+
+Para una ronda se certificó
+
+\[
+N_{\mathrm{act}}^{\min}(4,1)
+=
+N_{\mathrm{act}}^{\min}(8,1)
+=
+1.
+\]
+
+La cota inferior se deriva de la imposibilidad de que una diferencia no
+nula desaparezca después de las transformaciones lineales. La existencia
+de testigos con una sola S-box activa completa la prueba de optimalidad
+global.
+
+Para dos rondas se obtuvo
+
+\[
+N_{\mathrm{act}}^{\min}(4,2)
+=
+N_{\mathrm{act}}^{\min}(8,2)
+=
+4.
+\]
+
+CBC demostró que no existe una trayectoria con actividad total menor o
+igual que tres, mientras que los testigos reconstruidos alcanzaron la
+distribución
+
+\[
+2+2.
+\]
+
+La coincidencia entre ambas evidencias permite afirmar que cuatro es el
+mínimo global para los dos tamaños de palabra.
+
+Para tres rondas se establecieron los intervalos
+
+\[
+5
+\leq
+N_{\mathrm{act}}^{\min}(4,3)
+\leq
+13,
+\]
+
+y
+
+\[
+5
+\leq
+N_{\mathrm{act}}^{\min}(8,3)
+\leq
+14.
+\]
+
+Las cotas inferiores son globales y se derivan del mínimo exacto de dos
+rondas junto con la necesidad de activar al menos una S-box adicional en
+la tercera ronda.
+
+Las cotas superiores están respaldadas por testigos con distribuciones
+
+\[
+2+2+9
+\]
+
+para $z=4$, y
+
+\[
+2+2+10
+\]
+
+para $z=8$.
+
+Los valores 13 y 14 son óptimos dentro de la familia restringida
+$2+2+c$, pero no constituyen mínimos globales certificados para el espacio
+completo de tres rondas.
+
+
+\subsection{Interpretación}
+\label{subsec:conclusiones_interpretacion}
+
+Los resultados muestran que una diferencia puede permanecer localizada
+durante una ronda, pero la difusión acumulada incrementa la cantidad mínima
+de componentes no lineales activos cuando se consideran más rondas.
+
+La igualdad de los mínimos para $z=4$ y $z=8$ en una y dos rondas indica
+que duplicar el tamaño de palabra y el número de aplicaciones locales de
+$\chi$ no obliga, en estos horizontes, a aumentar la actividad mínima.
+
+En tres rondas, los mejores testigos restringidos difieren en una S-box.
+Sin embargo, como las cotas inferiores son iguales y los extremos superiores
+provienen de una familia específica, no puede concluirse que el mínimo
+global aumente necesariamente con el tamaño de palabra.
+
+El número de S-boxes activas debe interpretarse como una medida estructural
+de propagación no lineal. Esta cantidad no determina por sí sola la
+probabilidad diferencial de una trayectoria ni la seguridad completa de
+SHA-3.
+
+
+\subsection{Aporte metodológico y computacional}
+\label{subsec:aporte_metodologico}
+
+La principal ventaja de la formulación pareada es que la propagación a
+través de $\chi$ surge de dos evaluaciones exactas de la función booleana.
+Esto evita depender exclusivamente de una aproximación diferencial
+truncada y permite recuperar parejas concretas de estados.
+
+CBC fue suficiente para:
+
+\begin{itemize}
+    \item obtener y validar testigos;
+    \item demostrar infactibilidad en problemas auxiliares;
+    \item certificar los mínimos globales de una y dos rondas;
+    \item verificar estados y soportes obtenidos mediante enumeración.
+\end{itemize}
+
+Para tres rondas fue necesario complementar el modelo MILP con una búsqueda
+exhaustiva restringida. Esta combinación permitió obtener testigos
+verificables sin atribuirles un nivel de optimalidad superior al respaldado
+por las evidencias.
+
+La implementación se acompañó de una referencia funcional independiente,
+artefactos estructurados y una suite de 245 pruebas automatizadas. Estos
+elementos fortalecen la trazabilidad y permiten reconstruir los resultados
+principales.
+
+
+\subsection{Limitación principal}
+\label{subsec:conclusion_limitacion}
+
+La principal limitación es que el mínimo global de tres rondas permanece
+abierto.
+
+La búsqueda realizada es exhaustiva dentro de la familia
+
+\[
+2+2+c,
+\]
+
+pero no considera todas las distribuciones posibles de actividad durante
+las tres rondas. En consecuencia, el resultado correcto para estos
+experimentos es un intervalo de certificación y no un único valor exacto.
+
+Esta distinción es esencial: los testigos de actividades 13 y 14 demuestran
+que existen trayectorias con dichos valores, pero no descartan la existencia
+de trayectorias globalmente mejores.
+
+
+\subsection{Trabajo futuro}
+\label{subsec:trabajo_futuro}
+
+Las extensiones más relevantes del trabajo son:
+
+\begin{enumerate}
+    \item explorar distribuciones de tres rondas diferentes de
+    $2+2+c$;
+
+    \item incorporar restricciones de ruptura de simetrías y desigualdades
+    válidas que fortalezcan la relajación del modelo;
+
+    \item comparar CBC con solvers de mayor rendimiento, como Gurobi;
+
+    \item desarrollar estrategias de descomposición que separen la
+    generación de soportes, la asignación de valores absolutos y la
+    validación MILP;
+
+    \item incorporar pesos diferenciales de $\chi$ para minimizar el peso
+    de una trayectoria y no únicamente el número de S-boxes activas;
+
+    \item evaluar tamaños de palabra y números de rondas mayores.
+\end{enumerate}
+
+
+\subsection{Conclusión final}
+\label{subsec:conclusion_final}
+
+El número mínimo de S-boxes activas en Keccak reducido puede estudiarse de
+manera sistemática mediante una combinación de modelado MILP, problemas de
+factibilidad, enumeración controlada y validación independiente.
+
+Para una y dos rondas se obtuvieron mínimos globales exactos. Para tres
+rondas se construyeron cotas globales y testigos reproducibles, manteniendo
+una distinción explícita entre optimalidad global y optimalidad restringida.
+
+En conjunto, la implementación proporciona una respuesta rigurosa a la
+actividad planteada y establece una base extensible para futuros estudios
+de propagación diferencial en Keccak.
+
+
+\section*{Disponibilidad del código y los artefactos}
+\addcontentsline{toc}{section}{Disponibilidad del código y los artefactos}
+\label{sec:disponibilidad_codigo}
+
+El código fuente, las pruebas automatizadas, el notebook y los artefactos
+experimentales se encuentran disponibles en:
+
+\begin{center}
+\url{https://github.com/hsancheza90-art/keccak-milp-criptografia}
+\end{center}
+
+La versión utilizada para los resultados del informe está identificada
+mediante:
+
+\begin{center}
+\texttt{keccak-milp-experiments-v1}
+\end{center}
+
+y el commit:
+
+\begin{center}
+\texttt{0b089aa}.
+\end{center}
+
+Los comandos de reproducción, la descripción de los archivos generados y
+el procedimiento de validación se presentan en la
+Sección~\ref{sec:reproducibilidad}.

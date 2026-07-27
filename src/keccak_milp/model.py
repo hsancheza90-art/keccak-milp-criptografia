@@ -19,7 +19,10 @@ from typing import TypeAlias
 import pulp
 
 from keccak_milp.config import ExperimentConfig
-from keccak_milp.layers import rho_pi_destination
+from keccak_milp.layers import (
+    rho_pi_destination,
+    round_constant,
+)
 from keccak_milp.solver import build_solver
 
 
@@ -33,6 +36,7 @@ ThetaColumnIndex: TypeAlias = tuple[int, int, int]
 ThetaBitIndex: TypeAlias = tuple[int, int, int, int]
 
 RhoPiBitIndex: TypeAlias = tuple[int, int, int, int]
+ChiBitIndex: TypeAlias = tuple[int, int, int, int]
 
 @dataclass(frozen=True)
 class ModelStatistics:
@@ -152,11 +156,36 @@ class KeccakMILPModel:
             pulp.LpVariable,
         ] = {}
 
+        # Variables de la capa chi.
+        self.chi_and: dict[
+            ChiBitIndex,
+            pulp.LpVariable,
+        ] = {}
+
+        self.chi_output: dict[
+            ChiBitIndex,
+            pulp.LpVariable,
+        ] = {}
+
+        self.chi_q: dict[
+            ChiBitIndex,
+            pulp.LpVariable,
+        ] = {}
+
         # Control de las rondas rho-pi ya agregadas.
         self._rho_pi_rounds_added: set[int] = set()
 
+        # Control de las rondas chi ya agregadas.
+        self._chi_rounds_added: set[int] = set()
+
+        # Control de las rondas iota ya agregadas.
+        self._iota_rounds_added: set[int] = set()
+
         # Control de las rondas theta ya agregadas.
         self._theta_rounds_added: set[int] = set()
+
+        # Control de rondas completas ya agregadas.
+        self._rounds_added: set[int] = set()
 
         self._nonzero_input_added = False
         self._objective_added = False
@@ -301,6 +330,296 @@ class KeccakMILPModel:
                             variable_name
                         )
 
+    def _create_chi_variables(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Crea las variables de la capa chi para una ronda.
+
+        Por cada bit se crean:
+
+        - una variable binaria para el término AND;
+        - una variable binaria de salida;
+        - una variable binaria de paridad para el XOR.
+
+        En total se crean:
+
+            3 × 25 × z
+
+        variables binarias por ronda.
+        """
+
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda chi debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    index = (
+                        round_index,
+                        x,
+                        y,
+                        k,
+                    )
+
+                    self.chi_and[index] = (
+                        self._create_binary_variable(
+                            name=(
+                                f"chi_and_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            )
+                        )
+                    )
+
+                    self.chi_output[index] = (
+                        self._create_binary_variable(
+                            name=(
+                                f"chi_output_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            )
+                        )
+                    )
+
+                    self.chi_q[index] = (
+                        self._create_binary_variable(
+                            name=(
+                                f"chi_q_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            )
+                        )
+                    )
+
+    def _add_iota_constraints(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Conecta la salida de chi con el siguiente estado de frontera.
+
+        Para todos los lanes distintos de (0, 0):
+
+            A[r + 1, x, y, k] = Chi[r, x, y, k]
+
+        Para el lane (0, 0):
+
+            A[r + 1, 0, 0, k]
+            =
+            Chi[r, 0, 0, k] XOR RC[r, k]
+
+        Como RC[r, k] es una constante:
+
+        - si RC[r, k] = 0, se agrega una igualdad directa;
+        - si RC[r, k] = 1, se agrega:
+
+            A[r + 1, 0, 0, k]
+            =
+            1 - Chi[r, 0, 0, k]
+        """
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda iota debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        constant = round_constant(
+            round_index=round_index,
+            z=self.config.z,
+        )
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    chi_variable = self.chi_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    next_state_variable = self.state_variable(
+                        round_index=round_index + 1,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    constant_bit = 0
+
+                    if x == 0 and y == 0:
+                        constant_bit = (
+                            constant >> k
+                        ) & 1
+
+                    if constant_bit == 0:
+                        self.problem += (
+                            next_state_variable
+                            == chi_variable,
+                            (
+                                f"iota_equal_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            ),
+                        )
+                    else:
+                        self.problem += (
+                            next_state_variable
+                            == 1 - chi_variable,
+                            (
+                                f"iota_toggle_r{round_index}"
+                                f"_x{x}_y{y}_k{k}"
+                            ),
+                        )
+
+
+    def add_iota_layer(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Agrega la capa iota después de chi.
+
+        La salida de iota se conecta directamente con el estado de
+        frontera de la ronda siguiente.
+
+        Requiere que chi de la misma ronda ya exista.
+        La operación es idempotente.
+        """
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda iota debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        if round_index in self._iota_rounds_added:
+            return
+
+        if round_index not in self._chi_rounds_added:
+            raise RuntimeError(
+                "Debe agregarse chi antes de iota para la "
+                f"ronda {round_index}."
+            )
+
+        self._add_iota_constraints(round_index)
+
+        self._iota_rounds_added.add(round_index)
+
+    def iota_output_variable(
+        self,
+        round_index: int,
+        x: int,
+        y: int,
+        k: int,
+    ) -> pulp.LpVariable:
+        """
+        Devuelve una variable de salida de iota.
+
+        La salida de iota de la ronda r corresponde al estado de
+        frontera r + 1.
+        """
+        if round_index not in self._iota_rounds_added:
+            raise KeyError(
+                "La variable iota solicitada no existe. "
+                "Ejecuta add_iota_layer() primero."
+            )
+
+        return self.state_variable(
+            round_index=round_index + 1,
+            x=x,
+            y=y,
+            k=k,
+        )
+
+    def iota_output_values(
+        self,
+        round_index: int,
+        tolerance: float = 0.5,
+    ) -> list[list[list[int]]]:
+        """
+        Recupera la salida de iota como una estructura 5 × 5 × z.
+
+        La salida corresponde al estado de frontera r + 1.
+        """
+        output = [
+            [
+                [0 for _ in range(self.config.z)]
+                for _ in range(5)
+            ]
+            for _ in range(5)
+        ]
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    variable = self.iota_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    value = variable.value()
+
+                    if value is None:
+                        raise RuntimeError(
+                            "El modelo debe resolverse antes de "
+                            "recuperar la salida iota."
+                        )
+
+                    output[x][y][k] = int(
+                        value > tolerance
+                    )
+
+        return output
+
+    def add_round(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Agrega una ronda completa de Keccak al modelo.
+
+        El orden de construcción es:
+
+            theta -> rho-pi -> chi -> iota
+
+        La salida de la ronda queda conectada con el estado de
+        frontera ``round_index + 1``.
+
+        La operación es idempotente.
+        """
+        if round_index not in range(self.config.rounds):
+            raise ValueError(
+                "La ronda debe encontrarse entre 0 y "
+                f"{self.config.rounds - 1}."
+            )
+
+        if round_index in self._rounds_added:
+            return
+
+        self.add_theta_layer(round_index)
+        self.add_rho_pi_layers(round_index)
+        self.add_chi_layer(round_index)
+        self.add_iota_layer(round_index)
+
+        self._rounds_added.add(round_index)
+
+    def add_all_rounds(self) -> None:
+        """
+        Agrega todas las rondas configuradas en orden consecutivo.
+
+        Para ``rounds = R`` se construyen las rondas:
+
+            0, 1, ..., R - 1
+        """
+        for round_index in range(
+            self.config.rounds
+        ):
+            self.add_round(round_index)
+
+
     # ========================================================
     # ACCESO A VARIABLES
     # ========================================================
@@ -361,6 +680,158 @@ class KeccakMILPModel:
     # RESTRICCIÓN INICIAL
     # ========================================================
 
+    def _add_chi_constraints(
+        self,
+        round_index: int,
+    ) -> None:
+        """
+        Agrega la formulación MILP de chi.
+
+        Para cada posición se define:
+
+            a = B[x, y, k]
+            b = B[(x + 1) mod 5, y, k]
+            c = B[(x + 2) mod 5, y, k]
+
+            t = (NOT b) AND c
+            d = a XOR t
+
+        El término AND se linealiza mediante:
+
+            t <= 1 - b
+            t <= c
+            t >= c - b
+
+        El XOR se representa mediante:
+
+            a + t = d + 2 q
+        """
+
+        for x in range(5):
+            next_x = (x + 1) % 5
+            second_next_x = (x + 2) % 5
+
+            for y in range(5):
+                for k in range(self.config.z):
+                    index = (
+                        round_index,
+                        x,
+                        y,
+                        k,
+                    )
+
+                    a_variable = self.rho_pi_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    b_variable = self.rho_pi_output_variable(
+                        round_index=round_index,
+                        x=next_x,
+                        y=y,
+                        k=k,
+                    )
+
+                    c_variable = self.rho_pi_output_variable(
+                        round_index=round_index,
+                        x=second_next_x,
+                        y=y,
+                        k=k,
+                    )
+
+                    and_variable = self.chi_and[index]
+                    output_variable = self.chi_output[index]
+                    parity_variable = self.chi_q[index]
+
+                    # t <= 1 - b
+                    self.problem += (
+                        and_variable <= 1 - b_variable,
+                        (
+                            f"chi_and_not_b_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+                    # t <= c
+                    self.problem += (
+                        and_variable <= c_variable,
+                        (
+                            f"chi_and_c_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+                    # t >= c - b
+                    self.problem += (
+                        and_variable >= c_variable - b_variable,
+                        (
+                            f"chi_and_lower_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+                    # a XOR t = d
+                    self.problem += (
+                        a_variable + and_variable
+                        == output_variable + 2 * parity_variable,
+                        (
+                            f"chi_xor_r{round_index}"
+                            f"_x{x}_y{y}_k{k}"
+                        ),
+                    )
+
+
+    def add_chi_layer(
+    self,
+    round_index: int,
+    ) -> None:
+        """
+        Agrega la capa chi después de rho y pi.
+
+        Requiere que las capas rho y pi de la misma ronda ya existan.
+        La operación es idempotente.
+        """
+
+        if round_index in self._chi_rounds_added:
+            return
+
+        if round_index not in self._rho_pi_rounds_added:
+            raise RuntimeError(
+                "Deben agregarse rho y pi antes de chi para la "
+                f"ronda {round_index}."
+            )
+
+        self._create_chi_variables(round_index)
+        self._add_chi_constraints(round_index)
+
+        self._chi_rounds_added.add(round_index)
+        
+    def chi_output_variable(
+        self,
+        round_index: int,
+        x: int,
+        y: int,
+        k: int,
+    ) -> pulp.LpVariable:
+        """Devuelve una variable de salida de chi."""
+
+        index = (
+            round_index,
+            x,
+            y,
+            k,
+        )
+
+        if index not in self.chi_output:
+            raise KeyError(
+                "La variable chi solicitada no existe. "
+                "Ejecuta add_chi_layer() primero."
+            )
+
+        return self.chi_output[index]
+                    
     def _add_rho_pi_constraints(
         self,
         round_index: int,
@@ -408,6 +879,47 @@ class KeccakMILPModel:
                             f"_x{x}_y{y}_k{k}"
                         ),
                     )
+
+    def chi_output_values(
+        self,
+        round_index: int,
+        tolerance: float = 0.5,
+    ) -> list[list[list[int]]]:
+        """
+        Recupera la salida de chi como una estructura 5 × 5 × z.
+        """
+
+        output = [
+            [
+                [0 for _ in range(self.config.z)]
+                for _ in range(5)
+            ]
+            for _ in range(5)
+        ]
+
+        for x in range(5):
+            for y in range(5):
+                for k in range(self.config.z):
+                    variable = self.chi_output_variable(
+                        round_index=round_index,
+                        x=x,
+                        y=y,
+                        k=k,
+                    )
+
+                    value = variable.value()
+
+                    if value is None:
+                        raise RuntimeError(
+                            "El modelo debe resolverse antes de "
+                            "recuperar la salida chi."
+                        )
+
+                    output[x][y][k] = int(
+                        value > tolerance
+                    )
+
+        return output
 
     def add_nonzero_input_constraint(self) -> None:
         """
@@ -457,6 +969,145 @@ class KeccakMILPModel:
 
         self._objective_added = True
 
+    def set_boundary_hamming_weight_objective(
+        self,
+        boundary_index: int,
+    ) -> None:
+        """
+        Minimiza el peso de Hamming de un estado de frontera.
+
+        El objetivo se define como:
+
+            sum_{x,y,k} state[boundary_index, x, y, k]
+
+        Parameters
+        ----------
+        boundary_index:
+            Índice del estado de frontera. Debe encontrarse entre
+            0 y config.rounds, ambos inclusive.
+
+        Raises
+        ------
+        TypeError
+            Si el índice no es entero.
+
+        ValueError
+            Si el índice no corresponde a un estado de frontera.
+        """
+        if not isinstance(boundary_index, int):
+            raise TypeError(
+                "El índice del estado de frontera debe ser un entero."
+            )
+
+        if boundary_index not in range(
+            self.config.rounds + 1
+        ):
+            raise ValueError(
+                "El estado de frontera debe encontrarse entre 0 y "
+                f"{self.config.rounds}."
+            )
+
+        objective = pulp.lpSum(
+            self.state[
+                boundary_index,
+                x,
+                y,
+                k,
+            ]
+            for x in range(5)
+            for y in range(5)
+            for k in range(self.config.z)
+        )
+
+        self.problem.setObjective(
+            objective
+        )
+
+        self._objective_added = True
+
+    def set_input_output_hamming_weight_objective(
+        self,
+    ) -> None:
+        """
+        Minimiza la suma de los pesos de Hamming de la entrada y
+        del estado de frontera final.
+
+        El objetivo es:
+
+            HW(A_0) + HW(A_R)
+
+        donde R es el número de rondas configurado.
+        """
+        final_boundary = self.config.rounds
+
+        input_weight = pulp.lpSum(
+            self.state[
+                0,
+                x,
+                y,
+                k,
+            ]
+            for x in range(5)
+            for y in range(5)
+            for k in range(self.config.z)
+        )
+
+        output_weight = pulp.lpSum(
+            self.state[
+                final_boundary,
+                x,
+                y,
+                k,
+            ]
+            for x in range(5)
+            for y in range(5)
+            for k in range(self.config.z)
+        )
+
+        self.problem.setObjective(
+            input_weight + output_weight
+        )
+
+        self._objective_added = True
+        
+
+    def objective_value(self) -> float:
+        """
+        Devuelve el valor de la función objetivo después de resolver.
+
+        Raises
+        ------
+        RuntimeError
+            Si el modelo no tiene función objetivo o todavía no ha
+            sido resuelto.
+        """
+        if (
+            not self._objective_added
+            or self.problem.objective is None
+        ):
+            raise RuntimeError(
+                "El modelo no tiene una función objetivo."
+            )
+
+        if self.problem.status == pulp.LpStatusNotSolved:
+            raise RuntimeError(
+                "El modelo debe resolverse antes de recuperar "
+                "el valor objetivo."
+            )
+
+        result = pulp.value(
+            self.problem.objective
+        )
+
+        if result is None:
+            raise RuntimeError(
+                "No fue posible recuperar el valor de la "
+                "función objetivo."
+            )
+
+        return float(result)
+
+        
     # ========================================================
     # VARIABLES DE THETA
     # ========================================================
@@ -985,16 +1636,6 @@ class KeccakMILPModel:
     # RESULTADOS
     # ========================================================
 
-    def objective_value(self) -> float | None:
-        """Devuelve el valor de la función objetivo."""
-
-        value = pulp.value(self.problem.objective)
-
-        if value is None:
-            return None
-
-        return float(value)
-
     def active_initial_positions(
         self,
         tolerance: float = 0.5,
@@ -1052,6 +1693,9 @@ class KeccakMILPModel:
             + len(self.theta_output)
             + len(self.theta_qt)
             + len(self.rho_pi_output)
+            + len(self.chi_and)
+            + len(self.chi_output)
+            + len(self.chi_q)
         )
     
 

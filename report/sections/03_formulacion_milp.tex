@@ -1,0 +1,573 @@
+\section{Formulación MILP}
+\label{sec:formulacion_milp}
+
+El problema de minimizar el número de S-boxes activas se formula mediante
+Programación Lineal Entera Mixta. El modelo representa bit a bit dos
+ejecuciones de Keccak reducido, denominadas izquierda y derecha, e impone
+de manera exacta las transformaciones de cada ronda.
+
+A diferencia de una formulación diferencial truncada, el modelo conserva
+los valores absolutos de ambos estados. Las diferencias se calculan mediante
+restricciones XOR y la propagación a través de $\chi$ se obtiene evaluando
+la función booleana en las dos ejecuciones.
+
+Esta representación incrementa el número de variables, pero permite
+reconstruir parejas concretas de estados y verificar independientemente
+las soluciones obtenidas por el solver.
+
+
+\subsection{Índices y variables}
+\label{subsec:variables_milp}
+
+Los índices utilizados son
+
+\[
+r \in \{0,\ldots,R-1\},
+\qquad
+x,y \in \{0,\ldots,4\},
+\qquad
+k \in \{0,\ldots,z-1\},
+\]
+
+donde $r$ identifica la ronda, $(x,y)$ identifica una palabra del estado
+y $k$ representa una posición dentro de la palabra.
+
+Las dos ejecuciones se identifican mediante
+
+\[
+\sigma \in \{L,R\}.
+\]
+
+Para cada ejecución se introducen las variables binarias
+
+\[
+A_{r,x,y,k}^{\sigma} \in \{0,1\},
+\]
+
+que representan el estado al inicio de la ronda $r$.
+
+Los estados intermedios se representan mediante
+
+\[
+T_{r,x,y,k}^{\sigma},
+\qquad
+R_{r,x,y,k}^{\sigma},
+\qquad
+B_{r,x,y,k}^{\sigma},
+\qquad
+C_{r,x,y,k}^{\sigma},
+\]
+
+donde:
+
+\begin{itemize}
+    \item $T^\sigma_r$ es la salida de $\theta$;
+    \item $R^\sigma_r$ es la salida de $\rho$;
+    \item $B^\sigma_r$ es la salida de $\pi$ y la entrada de $\chi$;
+    \item $C^\sigma_r$ es la salida de $\chi$.
+\end{itemize}
+
+También se introducen variables de diferencia
+
+\[
+\Delta A_{r,x,y,k} \in \{0,1\},
+\qquad
+\Delta B_{r,x,y,k} \in \{0,1\},
+\]
+
+y variables de actividad
+
+\[
+a_{r,y,k} \in \{0,1\}.
+\]
+
+
+\subsection{Linealización de la operación XOR}
+\label{subsec:xor_milp}
+
+Sean $u$, $v$ y $d$ variables binarias relacionadas mediante
+
+\[
+d = u \oplus v.
+\]
+
+La operación XOR se representa exactamente introduciendo una variable
+auxiliar binaria $q$ y la igualdad
+
+\[
+u+v=d+2q.
+\label{eq:xor_lineal}
+\]
+
+Esta restricción reproduce las cuatro combinaciones posibles:
+
+\[
+\begin{array}{c|c|c}
+u & v & d\\
+\hline
+0 & 0 & 0\\
+0 & 1 & 1\\
+1 & 0 & 1\\
+1 & 1 & 0
+\end{array}
+\]
+
+La misma construcción se utiliza en todas las operaciones XOR binarias
+del modelo. Cuando es necesario calcular el XOR de más de dos bits, la
+operación se descompone en una secuencia de XOR binarios.
+
+Las diferencias entre las dos ejecuciones se definen mediante
+
+\[
+\Delta A_{r,x,y,k}
+=
+A_{r,x,y,k}^{L}
+\oplus
+A_{r,x,y,k}^{R},
+\]
+
+y
+
+\[
+\Delta B_{r,x,y,k}
+=
+B_{r,x,y,k}^{L}
+\oplus
+B_{r,x,y,k}^{R}.
+\]
+
+
+\subsection{Representación de las capas lineales}
+\label{subsec:capas_lineales_milp}
+
+Las transformaciones $\theta$, $\rho$ y $\pi$ se incorporan de manera
+independiente para cada ejecución $\sigma$.
+
+
+\subsubsection{Transformación \texorpdfstring{$\theta$}{theta}}
+
+Para cada columna se calcula la paridad
+
+\[
+P_{r,x,k}^{\sigma}
+=
+\bigoplus_{y=0}^{4}
+A_{r,x,y,k}^{\sigma}.
+\]
+
+En la implementación, este XOR de cinco bits se construye mediante
+operaciones XOR binarias sucesivas.
+
+El término de difusión se define como
+
+\[
+D_{r,x,k}^{\sigma}
+=
+P_{r,(x-1)\bmod 5,k}^{\sigma}
+\oplus
+P_{r,(x+1)\bmod 5,(k-1)\bmod z}^{\sigma}.
+\]
+
+La salida de $\theta$ satisface
+
+\[
+T_{r,x,y,k}^{\sigma}
+=
+A_{r,x,y,k}^{\sigma}
+\oplus
+D_{r,x,k}^{\sigma}.
+\]
+
+Todas estas relaciones se linealizan utilizando la
+Ecuación~\ref{eq:xor_lineal}.
+
+
+\subsubsection{Transformaciones \texorpdfstring{$\rho$}{rho} y
+\texorpdfstring{$\pi$}{pi}}
+
+Las transformaciones $\rho$ y $\pi$ son permutaciones de bits. Por tanto,
+se representan mediante igualdades directas y no requieren variables
+auxiliares de producto.
+
+La transformación $\rho$ se impone mediante
+
+\[
+R_{r,x,y,k}^{\sigma}
+=
+T_{r,x,y,(k-r[x,y])\bmod z}^{\sigma}.
+\]
+
+La transformación $\pi$ se representa como
+
+\[
+B_{r,y,(2x+3y)\bmod 5,k}^{\sigma}
+=
+R_{r,x,y,k}^{\sigma}.
+\]
+
+Estas restricciones conservan el valor de cada bit y modifican únicamente
+su posición dentro del estado.
+
+
+\subsection{Representación exacta de la capa \texorpdfstring{$\chi$}{chi}}
+\label{subsec:chi_milp}
+
+Para cada ejecución $\sigma$, la transformación $\chi$ se define por
+
+\[
+C_{r,x,y,k}^{\sigma}
+=
+B_{r,x,y,k}^{\sigma}
+\oplus
+\left[
+\left(
+1-B_{r,(x+1)\bmod 5,y,k}^{\sigma}
+\right)
+B_{r,(x+2)\bmod 5,y,k}^{\sigma}
+\right].
+\]
+
+La expresión contiene el producto de dos variables binarias. Para
+linealizarlo se introduce
+
+\[
+s_{r,x,y,k}^{\sigma} \in \{0,1\},
+\]
+
+con
+
+\[
+s_{r,x,y,k}^{\sigma}
+=
+\left(
+1-B_{r,(x+1)\bmod 5,y,k}^{\sigma}
+\right)
+B_{r,(x+2)\bmod 5,y,k}^{\sigma}.
+\]
+
+La conjunción se representa mediante las restricciones
+
+\[
+s_{r,x,y,k}^{\sigma}
+\leq
+1-B_{r,(x+1)\bmod 5,y,k}^{\sigma},
+\]
+
+\[
+s_{r,x,y,k}^{\sigma}
+\leq
+B_{r,(x+2)\bmod 5,y,k}^{\sigma},
+\]
+
+\[
+s_{r,x,y,k}^{\sigma}
+\geq
+B_{r,(x+2)\bmod 5,y,k}^{\sigma}
+-
+B_{r,(x+1)\bmod 5,y,k}^{\sigma}.
+\]
+
+Como todas las variables son binarias, estas desigualdades fuerzan
+exactamente el valor del producto.
+
+La salida de $\chi$ se obtiene mediante
+
+\[
+C_{r,x,y,k}^{\sigma}
+=
+B_{r,x,y,k}^{\sigma}
+\oplus
+s_{r,x,y,k}^{\sigma},
+\]
+
+que se linealiza nuevamente mediante la
+Ecuación~\ref{eq:xor_lineal}.
+
+La formulación se aplica por separado a las ejecuciones izquierda y
+derecha. La diferencia de salida surge, por tanto, de dos evaluaciones
+exactas de la función booleana $\chi$.
+
+
+\subsection{Representación de la capa \texorpdfstring{$\iota$}{iota}}
+\label{subsec:iota_milp}
+
+La constante de ronda es conocida y no constituye una variable de decisión.
+
+Para la palabra $(0,0)$, si el bit correspondiente de la constante es cero,
+se impone
+
+\[
+A_{r+1,0,0,k}^{\sigma}
+=
+C_{r,0,0,k}^{\sigma}.
+\]
+
+Si el bit de la constante es uno, se utiliza
+
+\[
+A_{r+1,0,0,k}^{\sigma}
+=
+1-C_{r,0,0,k}^{\sigma}.
+\]
+
+Para las demás posiciones se imponen igualdades directas:
+
+\[
+A_{r+1,x,y,k}^{\sigma}
+=
+C_{r,x,y,k}^{\sigma},
+\qquad
+(x,y)\neq(0,0).
+\]
+
+Aunque la misma constante se cancela al calcular la diferencia entre
+ejecuciones, su inclusión permite representar y reconstruir correctamente
+los estados absolutos.
+
+
+\subsection{Variables de actividad}
+\label{subsec:variables_actividad_milp}
+
+La variable
+
+\[
+a_{r,y,k} \in \{0,1\}
+\]
+
+indica si la aplicación local de $\chi$ situada en $(y,k)$ se encuentra
+activa durante la ronda $r$.
+
+Esta variable debe valer uno cuando al menos uno de los cinco bits de
+entrada presenta una diferencia no nula. La relación OR se representa
+mediante
+
+\[
+a_{r,y,k}
+\geq
+\Delta B_{r,x,y,k},
+\qquad
+x\in\{0,\ldots,4\},
+\]
+
+y
+
+\[
+a_{r,y,k}
+\leq
+\sum_{x=0}^{4}
+\Delta B_{r,x,y,k}.
+\]
+
+Si los cinco bits de diferencia son cero, la segunda restricción fuerza
+
+\[
+a_{r,y,k}=0.
+\]
+
+Si al menos uno de los bits es uno, alguna de las cotas inferiores fuerza
+
+\[
+a_{r,y,k}=1.
+\]
+
+El número de S-boxes activas en la ronda $r$ es
+
+\[
+m_r
+=
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\]
+
+
+\subsection{Condición de diferencia inicial no nula}
+\label{subsec:diferencia_inicial_milp}
+
+Sin una restricción adicional, el modelo admitiría como solución trivial
+dos estados iniciales idénticos, cuya actividad total sería cero.
+
+Para excluir esta solución se impone
+
+\[
+\sum_{x=0}^{4}
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+\Delta A_{0,x,y,k}
+\geq
+1.
+\]
+
+Esta condición garantiza que
+
+\[
+A_0^L \neq A_0^R.
+\]
+
+
+\subsection{Función objetivo}
+\label{subsec:funcion_objetivo_milp}
+
+La actividad total durante $R$ rondas se define como
+
+\[
+N_{\mathrm{act}}
+=
+\sum_{r=0}^{R-1}
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\]
+
+La función objetivo es
+
+\[
+\min
+\sum_{r=0}^{R-1}
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\label{eq:funcion_objetivo}
+\]
+
+Cuando el solver demuestra la optimalidad global, el valor de la
+Ecuación~\ref{eq:funcion_objetivo} corresponde a
+
+\[
+N_{\mathrm{act}}^{\min}(z,R).
+\]
+
+Cuando se obtiene únicamente una solución factible, su actividad constituye
+una cota superior para el mínimo global.
+
+
+\subsection{Restricciones auxiliares}
+\label{subsec:restricciones_auxiliares}
+
+Además del problema de minimización, la implementación permite incorporar
+restricciones auxiliares para certificar cotas y validar testigos.
+
+
+\subsubsection{Cota sobre la actividad total}
+
+Para comprobar si existe una trayectoria con actividad no mayor que un
+valor $U$, se añade
+
+\[
+N_{\mathrm{act}} \leq U.
+\]
+
+Si el solver demuestra que este problema es infactible, se concluye que no
+existe una trayectoria válida con actividad total menor o igual que $U$.
+
+
+\subsubsection{Actividad exacta por ronda}
+
+El número de S-boxes activas en una ronda concreta puede fijarse mediante
+
+\[
+m_r
+=
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}
+=
+\widehat{m}_r,
+\]
+
+donde $\widehat{m}_r$ es el valor impuesto.
+
+Esta restricción permite estudiar distribuciones como
+
+\[
+2+2
+\]
+
+o
+
+\[
+2+2+c.
+\]
+
+
+\subsubsection{Fijación de soportes activos}
+
+Sea
+
+\[
+S_r
+\subseteq
+\{0,\ldots,4\}
+\times
+\{0,\ldots,z-1\}
+\]
+
+un soporte activo conocido. Puede imponerse
+
+\[
+a_{r,y,k}=1
+\qquad
+\text{si }(y,k)\in S_r,
+\]
+
+y
+
+\[
+a_{r,y,k}=0
+\qquad
+\text{si }(y,k)\notin S_r.
+\]
+
+Esta operación se utiliza para comprobar con el modelo MILP los soportes
+obtenidos mediante búsqueda o reconstrucción.
+
+
+\subsubsection{Fijación de estados concretos}
+
+Los estados iniciales de un testigo pueden fijarse mediante
+
+\[
+A_{0,x,y,k}^{L}
+=
+\widehat{A}_{0,x,y,k}^{L},
+\]
+
+\[
+A_{0,x,y,k}^{R}
+=
+\widehat{A}_{0,x,y,k}^{R}.
+\]
+
+Con ambos estados fijados, el modelo verifica que las transformaciones, las
+diferencias y la actividad reportada sean consistentes con todas las
+restricciones.
+
+
+\subsection{Interpretación de los resultados del solver}
+\label{subsec:interpretacion_solver}
+
+La interpretación del resultado depende del estado de terminación del
+solver:
+
+\begin{description}
+    \item[Óptimo global.] Se encontró una solución factible y se demostró
+    que no existe otra con menor valor objetivo.
+
+    \item[Solución factible.] Se encontró un testigo válido, pero no se
+    demostró la optimalidad. Su valor constituye una cota superior.
+
+    \item[Infactible.] Se demostró que ninguna solución satisface las
+    restricciones impuestas. Este resultado puede utilizarse para elevar
+    una cota inferior.
+
+    \item[Límite de tiempo.] La terminación por tiempo no demuestra por sí
+    sola optimalidad, infactibilidad ni ausencia de soluciones.
+\end{description}
+
+Esta distinción es fundamental en los experimentos de tres rondas. Los
+testigos con actividades 13 y 14 demuestran cotas superiores globales,
+pero su optimalidad solo fue establecida dentro de la familia restringida
+
+\[
+2+2+c.
+\]

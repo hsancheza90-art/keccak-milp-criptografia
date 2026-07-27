@@ -1,0 +1,148 @@
+﻿\section*{Disponibilidad del código y los artefactos}
+\phantomsection
+\label{sec:disponibilidad-codigo}
+
+El código fuente, las pruebas automatizadas, los scripts de ejecución,
+el notebook y los artefactos experimentales asociados con este trabajo
+se encuentran disponibles públicamente en el repositorio:
+
+\begin{center}
+\url{https://github.com/hsancheza90-art/keccak-milp-criptografia}
+\end{center}
+
+Para garantizar la trazabilidad de los resultados, la versión utilizada
+en este artículo se identifica mediante la etiqueta:
+
+\begin{center}
+\path{keccak-milp-experiments-v1}
+\end{center}
+
+La etiqueta corresponde al commit:
+
+\begin{center}
+\path{0b089aa}
+\end{center}
+
+La rama \path{feature/chi-milp} contiene el desarrollo del modelo y
+puede recibir modificaciones posteriores. Por esta razón, la etiqueta
+estable y el identificador del commit constituyen las referencias
+recomendadas para reproducir los resultados presentados.
+
+\subsection*{Estructura de los recursos publicados}
+
+La Tabla~\ref{tab:published-resources} resume los recursos principales
+del repositorio.
+
+\begin{table}[H]
+\centering
+\caption{Recursos disponibles para reproducción y auditoría.}
+\label{tab:published-resources}
+\begin{tabularx}{\textwidth}{
+    >{\raggedright\arraybackslash}p{0.40\textwidth}
+    X
+}
+\toprule
+\textbf{Recurso} & \textbf{Contenido} \\
+\midrule
+
+\path{src/keccak_milp/}
+&
+Implementación de referencia de Keccak reducido, formulación MILP,
+modelo diferencial pareado y funciones de búsqueda.
+\\
+
+\path{scripts/run_active_sbox_experiments.py}
+&
+Punto de entrada para ejecutar la matriz de experimentos en los modos
+\path{quick} y \path{full}.
+\\
+
+\path{tests/}
+&
+Pruebas unitarias, de integración, reconstrucción de testigos y
+validación de artefactos.
+\\
+
+\path{notebooks/keccak_milp_active_sboxes.ipynb}
+&
+Notebook académico ejecutado, con tablas, figura, resultados,
+interpretación y pruebas dirigidas.
+\\
+
+\path{outputs/results/active_sbox_results.csv}
+&
+Resultados consolidados de los seis experimentos.
+\\
+
+\path{outputs/results/active_sbox_witnesses.json}
+&
+Estados, soportes y datos necesarios para reconstruir los testigos.
+\\
+
+\path{outputs/results/experiment_environment.json}
+&
+Información del entorno y de la ejecución experimental.
+\\
+
+\path{outputs/figures/active_sbox_bounds.png}
+&
+Figura comparativa de las cotas inferiores y superiores.
+\\
+
+\path{report/}
+&
+Fuentes en LaTeX y versión compilable del artículo académico.
+\\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection*{Reproducción mínima}
+
+Una reproducción funcional de los resultados permanentes puede
+realizarse desde la raíz del repositorio mediante:
+
+\begin{lstlisting}[language=bash]
+python -m pytest -q --disable-warnings
+python scripts/run_active_sbox_experiments.py --mode quick
+\end{lstlisting}
+
+Para volver a ejecutar las búsquedas exhaustivas restringidas de tres
+rondas debe utilizarse:
+
+\begin{lstlisting}[language=bash]
+python scripts/run_active_sbox_experiments.py --mode full
+\end{lstlisting}
+
+El informe se compila desde la carpeta \path{report/}:
+
+\begin{lstlisting}[language=bash]
+latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+\end{lstlisting}
+
+\subsection*{Referencia de la versión experimental}
+
+La combinación de los siguientes elementos identifica de forma
+unívoca la versión del trabajo utilizada en el artículo:
+
+\begin{itemize}
+    \item repositorio:
+    \url{https://github.com/hsancheza90-art/keccak-milp-criptografia};
+
+    \item etiqueta:
+    \path{keccak-milp-experiments-v1};
+
+    \item commit:
+    \path{0b089aa};
+
+    \item ejecutor:
+    \path{scripts/run_active_sbox_experiments.py};
+
+    \item notebook:
+    \path{notebooks/keccak_milp_active_sboxes.ipynb}.
+\end{itemize}
+
+Esta información permite recuperar el código, verificar los testigos y
+reconstruir las tablas y figuras sin depender de la evolución futura de
+la rama de desarrollo.
