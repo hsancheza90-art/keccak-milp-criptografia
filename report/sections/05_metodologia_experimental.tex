@@ -1,0 +1,524 @@
+﻿\section{Metodología experimental}
+\label{sec:metodologia_experimental}
+
+La metodología experimental combina optimización MILP, problemas auxiliares
+de factibilidad, construcción de testigos y búsqueda exhaustiva restringida.
+El propósito no es únicamente encontrar trayectorias con baja actividad,
+sino determinar qué afirmaciones pueden considerarse mínimos globales y
+cuáles deben presentarse únicamente como cotas.
+
+Todos los candidatos utilizados en los resultados se reconstruyen mediante
+la implementación funcional descrita en la
+Sección~\ref{sec:arquitectura_implementacion}. De esta manera, la actividad
+reportada no depende exclusivamente del valor objetivo entregado por CBC.
+
+
+\subsection{Diseño experimental}
+\label{subsec:diseno_experimental}
+
+Se estudian los tamaños de palabra
+
+\[
+z \in \{4,8\}
+\]
+
+y los números de rondas
+
+\[
+R \in \{1,2,3\}.
+\]
+
+La combinación de ambos parámetros produce los seis experimentos de la
+Tabla~\ref{tab:matriz_experimentos}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Matriz de experimentos para Keccak reducido.}
+    \label{tab:matriz_experimentos}
+    \begin{tabular}{ccccc}
+        \hline
+        \textbf{Experimento}
+        &
+        \boldmath{$z$}
+        &
+        \textbf{Estado}
+        &
+        \textbf{S-boxes por ronda}
+        &
+        \textbf{Rondas}
+        \\
+        \hline
+        E1 & 4 & 100 bits & 20 & 1 \\
+        E2 & 4 & 100 bits & 20 & 2 \\
+        E3 & 4 & 100 bits & 20 & 3 \\
+        E4 & 8 & 200 bits & 40 & 1 \\
+        E5 & 8 & 200 bits & 40 & 2 \\
+        E6 & 8 & 200 bits & 40 & 3 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+La correspondencia entre rangos de intentos y número de rondas se utiliza
+únicamente para organizar estos escenarios, tal como se explicó en la
+Subsección~\ref{subsec:intentos_rondas}.
+
+
+\subsection{Variable de respuesta}
+\label{subsec:variable_respuesta}
+
+La variable principal es el número total de aplicaciones activas de
+$\chi$ durante $R$ rondas:
+
+\[
+N_{\mathrm{act}}
+=
+\sum_{r=0}^{R-1}
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\]
+
+La actividad de una ronda individual se representa mediante
+
+\[
+m_r
+=
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\]
+
+Por tanto,
+
+\[
+N_{\mathrm{act}}
+=
+m_0+m_1+\cdots+m_{R-1}.
+\]
+
+La notación
+
+\[
+2+2+9
+\]
+
+indica que una trayectoria activa dos S-boxes en la primera ronda, dos en
+la segunda y nueve en la tercera.
+
+El mínimo global para una configuración $(z,R)$ se denota por
+
+\[
+N_{\mathrm{act}}^{\min}(z,R).
+\]
+
+Cuando el valor exacto no puede certificarse, se reporta mediante un
+intervalo
+
+\[
+L(z,R)
+\leq
+N_{\mathrm{act}}^{\min}(z,R)
+\leq
+U(z,R),
+\]
+
+donde $L(z,R)$ es una cota inferior demostrada y $U(z,R)$ es la actividad
+de un testigo factible.
+
+
+\subsection{Niveles de certificación}
+\label{subsec:niveles_certificacion}
+
+Los resultados se clasifican según el tipo de evidencia disponible. La
+Tabla~\ref{tab:certificacion_resultados} resume las categorías utilizadas.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Niveles de certificación utilizados en los experimentos.}
+    \label{tab:certificacion_resultados}
+    \begin{tabular}{p{0.25\textwidth}p{0.67\textwidth}}
+        \hline
+        \textbf{Categoría} & \textbf{Interpretación} \\
+        \hline
+
+        Cota inferior
+        &
+        Valor por debajo del cual se ha demostrado que no puede existir
+        una trayectoria válida.
+        \\[3pt]
+
+        Testigo factible
+        &
+        Pareja concreta de estados que satisface el modelo y alcanza una
+        actividad determinada. Su valor proporciona una cota superior.
+        \\[3pt]
+
+        Óptimo global
+        &
+        La cota inferior coincide con la actividad de un testigo factible.
+        No existe una solución mejor en el espacio completo del modelo.
+        \\[3pt]
+
+        Óptimo restringido
+        &
+        Mejor valor obtenido exhaustivamente dentro de una familia
+        específica de trayectorias. No implica optimalidad global.
+        \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Una terminación por límite de tiempo no se interpreta como prueba de
+optimalidad ni de infactibilidad.
+
+
+\subsection{Procedimiento general}
+\label{subsec:procedimiento_general}
+
+Cada experimento sigue las siguientes etapas:
+
+\begin{enumerate}
+    \item seleccionar el tamaño de palabra $z$ y el número de rondas $R$;
+
+    \item construir las dos ejecuciones del modelo MILP;
+
+    \item imponer la condición de diferencia inicial no nula;
+
+    \item incorporar las variables de actividad y la función objetivo;
+
+    \item resolver el problema de minimización o un problema auxiliar de
+    factibilidad;
+
+    \item extraer los estados izquierdo y derecho cuando se obtiene una
+    solución;
+
+    \item reconstruir la trayectoria con la implementación funcional;
+
+    \item calcular nuevamente las diferencias y los soportes activos;
+
+    \item comparar la actividad reconstruida con la actividad obtenida por
+    el modelo;
+
+    \item clasificar el resultado según el nivel de certificación
+    alcanzado.
+\end{enumerate}
+
+Los procedimientos concretos difieren según el número de rondas, debido al
+crecimiento del espacio combinatorio.
+
+
+\subsection{Certificación para una ronda}
+\label{subsec:certificacion_una_ronda}
+
+Para una ronda se impone
+
+\[
+\Delta A_0 \neq 0.
+\]
+
+Como las transformaciones $\theta$, $\rho$ y $\pi$ son biyectivas, una
+diferencia inicial no nula no puede convertirse en una diferencia nula
+antes de alcanzar la capa $\chi$:
+
+\[
+\Delta A_0 \neq 0
+\Longrightarrow
+\Delta B_0 \neq 0.
+\]
+
+En consecuencia, al menos una aplicación local de $\chi$ debe estar
+activa:
+
+\[
+m_0 \geq 1.
+\]
+
+Esta propiedad proporciona una cota inferior teórica. Para completar la
+certificación se busca una pareja concreta de estados cuya actividad sea
+
+\[
+m_0=1.
+\]
+
+Cuando el testigo es reconstruido correctamente, la coincidencia entre la
+cota inferior y la cota superior establece el mínimo global.
+
+
+\subsection{Certificación para dos rondas}
+\label{subsec:certificacion_dos_rondas}
+
+Para dos rondas se minimiza
+
+\[
+N_{\mathrm{act}}
+=
+m_0+m_1.
+\]
+
+La certificación combina un problema de factibilidad y la construcción de
+un testigo.
+
+En primer lugar, se añade la restricción
+
+\[
+m_0+m_1 \leq 3.
+\]
+
+Si CBC demuestra que este modelo es infactible, queda descartada cualquier
+trayectoria con actividad total menor o igual que tres.
+
+En segundo lugar, se busca y reconstruye una trayectoria con distribución
+
+\[
+m_0=2,
+\qquad
+m_1=2.
+\]
+
+Su actividad total es
+
+\[
+N_{\mathrm{act}}=4.
+\]
+
+La coincidencia entre la infactibilidad del problema con cota tres y la
+existencia de un testigo de actividad cuatro permite certificar el mínimo
+global para dos rondas.
+
+
+\subsection{Estrategia para tres rondas}
+\label{subsec:estrategia_tres_rondas}
+
+Para tres rondas, la actividad total es
+
+\[
+N_{\mathrm{act}}
+=
+m_0+m_1+m_2.
+\]
+
+Toda trayectoria válida de tres rondas contiene en sus dos primeras rondas
+una trayectoria válida de dos rondas. Además, como una ronda de Keccak es
+biyectiva, la diferencia no puede desaparecer antes de la tercera
+aplicación de $\chi$. Por tanto,
+
+\[
+m_2 \geq 1.
+\]
+
+Una vez certificado el mínimo de dos rondas, puede establecerse la cota
+
+\[
+N_{\mathrm{act}}^{\min}(z,3)
+\geq
+N_{\mathrm{act}}^{\min}(z,2)+1.
+\]
+
+Esta relación proporciona una cota inferior global para tres rondas.
+
+Sin embargo, la resolución completa del modelo de tres rondas no permitió
+cerrar la brecha de optimalidad con CBC. Por ello, la obtención de cotas
+superiores se abordó mediante una búsqueda restringida a trayectorias con
+estructura
+
+\[
+2+2+c,
+\]
+
+donde $c$ es la actividad inducida en la tercera ronda.
+
+
+\subsection{Búsqueda exhaustiva restringida}
+\label{subsec:busqueda_exhaustiva_restringida}
+
+La búsqueda toma como punto de partida trayectorias óptimas de dos rondas
+con distribución
+
+\[
+2+2.
+\]
+
+Una trayectoria se caracteriza mediante los soportes activos
+
+\[
+S_0,
+S_1
+\subseteq
+\{0,\ldots,4\}
+\times
+\{0,\ldots,z-1\},
+\]
+
+con
+
+\[
+|S_0|=|S_1|=2.
+\]
+
+Después de aplicar los filtros de compatibilidad diferencial, se obtuvieron
+
+\[
+200
+\]
+
+trayectorias para $z=4$ y
+
+\[
+400
+\]
+
+trayectorias para $z=8$.
+
+Estos conteos corresponden a las trayectorias admitidas por la rutina de
+búsqueda implementada.
+
+
+\subsubsection{Realizaciones concretas}
+
+El soporte diferencial no determina de manera única los valores absolutos
+de las entradas a $\chi$. Debido a la no linealidad de esta capa, diferentes
+valores absolutos pueden producir distintas diferencias de salida.
+
+Cada S-box local procesa cinco bits y admite
+
+\[
+2^5=32
+\]
+
+valores posibles. Como la segunda ronda contiene dos S-boxes activas, se
+enumeran
+
+\[
+32^2=1024
+\]
+
+realizaciones por trayectoria.
+
+Las posiciones cuya diferencia es nula se fijan a un representante común
+en ambas ejecuciones. Esta elección evita enumerar valores equivalentes que
+no modifican la diferencia local.
+
+El tamaño total de las búsquedas se presenta en la
+Tabla~\ref{tab:tamano_busqueda_restringida}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Tamaño de la búsqueda exhaustiva restringida.}
+    \label{tab:tamano_busqueda_restringida}
+    \begin{tabular}{cccc}
+        \hline
+        \boldmath{$z$}
+        &
+        \textbf{Trayectorias}
+        &
+        \textbf{Realizaciones por trayectoria}
+        &
+        \textbf{Total}
+        \\
+        \hline
+        4 & 200 & 1024 & 204\,800 \\
+        8 & 400 & 1024 & 409\,600 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+
+\subsubsection{Evaluación de la tercera ronda}
+
+Para cada realización se propagan los estados hasta la entrada de $\chi$
+en la tercera ronda. El soporte activo se calcula como
+
+\[
+S_2
+=
+\left\{
+(y,k):
+\bigvee_{x=0}^{4}
+\Delta B_2[x,y,k]=1
+\right\}.
+\]
+
+La actividad de la tercera ronda es
+
+\[
+c=|S_2|,
+\]
+
+y la actividad total del candidato es
+
+\[
+2+2+c.
+\]
+
+La búsqueda conserva los candidatos con menor valor de $c$ junto con la
+información necesaria para reconstruir sus estados iniciales, sus
+diferencias y sus soportes activos.
+
+
+\subsection{Validación de los candidatos}
+\label{subsec:validacion_candidatos}
+
+Los mejores candidatos de la búsqueda restringida se validan mediante el
+siguiente procedimiento:
+
+\begin{enumerate}
+    \item reconstruir los estados iniciales $A_0^L$ y $A_0^R$;
+
+    \item ejecutar las tres rondas con la implementación de referencia;
+
+    \item calcular las diferencias antes de cada capa $\chi$;
+
+    \item reconstruir los soportes $S_0$, $S_1$ y $S_2$;
+
+    \item comprobar que
+
+    \[
+    |S_0|=2,
+    \qquad
+    |S_1|=2;
+    \]
+
+    \item comprobar que $|S_2|$ coincida con el valor obtenido durante la
+    enumeración;
+
+    \item verificar que la actividad total sea
+
+    \[
+    2+2+|S_2|;
+    \]
+
+    \item fijar, cuando sea necesario, los estados y soportes dentro del
+    modelo MILP para comprobar su consistencia.
+\end{enumerate}
+
+Esta validación demuestra que los candidatos son trayectorias factibles del
+modelo completo y no únicamente patrones generados por la rutina de
+búsqueda.
+
+
+\subsection{Criterios de presentación}
+\label{subsec:criterios_presentacion}
+
+Los resultados se presentan de acuerdo con las siguientes reglas:
+
+\begin{enumerate}
+    \item si una cota inferior coincide con la actividad de un testigo
+    factible, se reporta un mínimo global exacto;
+
+    \item si la cota inferior es menor que el mejor testigo disponible, se
+    reporta un intervalo;
+
+    \item si la búsqueda es exhaustiva únicamente dentro de una familia,
+    el mejor valor se identifica como óptimo restringido;
+
+    \item una terminación por tiempo no se interpreta como prueba de
+    infactibilidad ni de optimalidad;
+
+    \item todo testigo empleado en las conclusiones debe ser reconstruible
+    mediante los artefactos del proyecto.
+\end{enumerate}
+
+De acuerdo con estos criterios, los casos de una y dos rondas pueden
+producir mínimos globales exactos. En tres rondas se obtiene una cota
+inferior global y una cota superior respaldada por testigos de la familia
+$2+2+c$.

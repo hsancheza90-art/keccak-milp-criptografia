@@ -1,0 +1,427 @@
+\section{Keccak reducido y modelo de actividad}
+\label{sec:keccak_reducido}
+
+Keccak es una familia de funciones criptográficas basada en una permutación
+sobre un estado tridimensional de bits. El estándar SHA-3 utiliza
+permutaciones de la familia Keccak-$p$ y define cada ronda mediante la
+composición de cinco transformaciones:
+
+\[
+\theta
+\longrightarrow
+\rho
+\longrightarrow
+\pi
+\longrightarrow
+\chi
+\longrightarrow
+\iota.
+\]
+
+Las transformaciones $\theta$, $\rho$ y $\pi$ conforman la parte lineal de
+la ronda. La transformación $\chi$ introduce la no linealidad, mientras que
+$\iota$ incorpora una constante dependiente del número de ronda
+\cite{nist_fips202,bertoni2011keccak_reference}.
+
+En este trabajo se conserva la estructura de la ronda de Keccak, pero se
+emplean tamaños de palabra reducidos para hacer viable la construcción y
+resolución del modelo MILP.
+
+
+\subsection{Representación del estado}
+\label{subsec:representacion_estado}
+
+El estado al inicio de la ronda $r$ se representa mediante el arreglo
+binario
+
+\[
+A_r[x,y,k] \in \{0,1\},
+\]
+
+donde
+
+\[
+x,y \in \{0,1,2,3,4\},
+\qquad
+k \in \{0,\ldots,z-1\}.
+\]
+
+Las coordenadas $(x,y)$ identifican una de las 25 palabras o
+\emph{lanes} del estado, mientras que $k$ identifica una posición dentro
+de una palabra de longitud $z$. Por tanto, el tamaño total del estado es
+
+\[
+25z \text{ bits}.
+\]
+
+Se analizan los tamaños de palabra $z=4$ y $z=8$. La
+Tabla~\ref{tab:configuraciones_keccak} resume las configuraciones
+consideradas.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Configuraciones reducidas de Keccak consideradas en el trabajo.}
+    \label{tab:configuraciones_keccak}
+    \begin{tabular}{cccc}
+        \hline
+        $z$ & Tamaño del estado & Palabras & S-boxes por ronda \\
+        \hline
+        4 & 100 bits & 25 & 20 \\
+        8 & 200 bits & 25 & 40 \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Cada aplicación local de $\chi$ procesa cinco bits que comparten las
+coordenadas $(y,k)$ y recorren los cinco valores posibles de $x$. Como
+existen cinco valores de $y$ y $z$ posiciones dentro de cada palabra, el
+número de aplicaciones locales de $\chi$ por ronda es
+
+\[
+5z.
+\]
+
+
+\subsection{Transformaciones de una ronda}
+\label{subsec:transformaciones_ronda}
+
+Para distinguir los estados intermedios de una ronda se utiliza la siguiente
+notación:
+
+\[
+T_r = \theta(A_r),
+\]
+
+\[
+R_r = \rho(T_r),
+\]
+
+\[
+B_r = \pi(R_r),
+\]
+
+\[
+C_r = \chi(B_r),
+\]
+
+\[
+A_{r+1} = \iota(C_r,r).
+\]
+
+El estado $B_r$ corresponde a la entrada de la capa no lineal $\chi$ y
+será utilizado posteriormente para determinar qué S-boxes se encuentran
+activas.
+
+
+\subsubsection{Transformación \texorpdfstring{$\theta$}{theta}}
+
+La transformación $\theta$ introduce difusión entre las columnas del
+estado. Primero se calcula la paridad de cada columna:
+
+\[
+P_r[x,k]
+=
+\bigoplus_{y=0}^{4}
+A_r[x,y,k].
+\]
+
+A partir de estas paridades se define el término de difusión
+
+\[
+D_r[x,k]
+=
+P_r[(x-1)\bmod 5,k]
+\oplus
+P_r[(x+1)\bmod 5,(k-1)\bmod z].
+\]
+
+La salida de $\theta$ es
+
+\[
+T_r[x,y,k]
+=
+A_r[x,y,k]
+\oplus
+D_r[x,k].
+\]
+
+La transformación $\theta$ es lineal sobre $\mathrm{GF}(2)$ y distribuye
+la información de la paridad de una columna hacia columnas vecinas.
+
+
+\subsubsection{Transformaciones \texorpdfstring{$\rho$}{rho} y
+\texorpdfstring{$\pi$}{pi}}
+
+La transformación $\rho$ rota cada palabra según un desplazamiento
+predefinido. Los desplazamientos especificados por Keccak se interpretan
+módulo $z$:
+
+\[
+R_r[x,y,k]
+=
+T_r
+\left[
+x,
+y,
+\bigl(k-r[x,y]\bigr)\bmod z
+\right],
+\]
+
+donde $r[x,y]$ representa el desplazamiento asignado a la palabra
+$(x,y)$.
+
+La transformación $\pi$ reorganiza las palabras dentro del estado:
+
+\[
+B_r
+\left[
+y,
+(2x+3y)\bmod 5,
+k
+\right]
+=
+R_r[x,y,k].
+\]
+
+Las transformaciones $\rho$ y $\pi$ son permutaciones de posiciones. Por
+tanto, no modifican los valores de los bits, sino únicamente su ubicación
+dentro del estado.
+
+
+\subsubsection{Transformación \texorpdfstring{$\chi$}{chi}}
+
+La transformación $\chi$ constituye la única capa no lineal de la ronda.
+Para cada posición $(y,k)$ opera sobre los cinco bits obtenidos al variar
+$x$:
+
+\[
+C_r[x,y,k]
+=
+B_r[x,y,k]
+\oplus
+\left[
+\left(
+1 \oplus B_r[(x+1)\bmod 5,y,k]
+\right)
+B_r[(x+2)\bmod 5,y,k]
+\right].
+\]
+
+Cada conjunto
+
+\[
+\left(
+B_r[0,y,k],
+B_r[1,y,k],
+B_r[2,y,k],
+B_r[3,y,k],
+B_r[4,y,k]
+\right)
+\]
+
+se interpreta en este trabajo como una S-box local de cinco bits.
+
+Esta denominación no implica que Keccak utilice una tabla de sustitución
+independiente en el sentido tradicional. Se emplea porque cada grupo local
+de cinco bits constituye una unidad no lineal cuya actividad puede
+contabilizarse durante la propagación diferencial.
+
+
+\subsubsection{Transformación \texorpdfstring{$\iota$}{iota}}
+
+La transformación $\iota$ incorpora una constante de ronda en la palabra
+ubicada en las coordenadas $(0,0)$. Su acción puede expresarse como
+
+\[
+A_{r+1}[x,y,k]
+=
+\begin{cases}
+C_r[0,0,k] \oplus RC_r[k],
+    & \text{si } (x,y)=(0,0),\\[4pt]
+C_r[x,y,k],
+    & \text{en otro caso},
+\end{cases}
+\]
+
+donde $RC_r[k]$ representa el bit correspondiente de la constante de la
+ronda $r$.
+
+Para los tamaños de palabra $z=4$ y $z=8$, las constantes se restringen a
+las primeras $z$ posiciones de la palabra.
+
+
+\subsection{Modelo diferencial pareado}
+\label{subsec:modelo_diferencial_pareado}
+
+El análisis considera dos ejecuciones simultáneas de Keccak, denominadas
+ejecución izquierda y ejecución derecha. Sus estados al inicio de la ronda
+$r$ se representan mediante
+
+\[
+A_r^L
+\qquad \text{y} \qquad
+A_r^R.
+\]
+
+La diferencia entre ambos estados se define mediante XOR:
+
+\[
+\Delta A_r
+=
+A_r^L \oplus A_r^R.
+\]
+
+De forma análoga, los estados inmediatamente anteriores a la capa $\chi$
+son
+
+\[
+B_r^L
+=
+(\pi \circ \rho \circ \theta)(A_r^L),
+\]
+
+\[
+B_r^R
+=
+(\pi \circ \rho \circ \theta)(A_r^R),
+\]
+
+y su diferencia es
+
+\[
+\Delta B_r
+=
+B_r^L \oplus B_r^R.
+\]
+
+La utilización de dos ejecuciones concretas permite representar
+exactamente el comportamiento de la capa no lineal. En lugar de aproximar
+la propagación diferencial de $\chi$, se evalúa la transformación sobre
+ambos estados y posteriormente se calcula la diferencia entre sus salidas.
+
+La constante de ronda aplicada por $\iota$ es idéntica en las dos
+ejecuciones. En consecuencia, se cancela al calcular la diferencia:
+
+\[
+\left(
+C_r^L \oplus RC_r
+\right)
+\oplus
+\left(
+C_r^R \oplus RC_r
+\right)
+=
+C_r^L \oplus C_r^R.
+\]
+
+Aunque $\iota$ no modifica la diferencia, se conserva en la implementación
+para mantener una representación exacta de los estados absolutos y permitir
+la reconstrucción completa de los testigos.
+
+
+\subsection{Definición de S-box activa}
+\label{subsec:sbox_activa}
+
+Una aplicación local de $\chi$ en la posición $(y,k)$ de la ronda $r$ se
+considera activa cuando al menos uno de sus cinco bits de entrada presenta
+una diferencia no nula.
+
+Se introduce el indicador binario
+
+\[
+a_{r,y,k} \in \{0,1\},
+\]
+
+definido por
+
+\[
+a_{r,y,k}
+=
+\bigvee_{x=0}^{4}
+\Delta B_r[x,y,k].
+\]
+
+Por tanto,
+
+\[
+a_{r,y,k}=1
+\]
+
+si existe al menos un valor de $x$ para el cual
+
+\[
+\Delta B_r[x,y,k]=1.
+\]
+
+El número de S-boxes activas en la ronda $r$ se define como
+
+\[
+m_r
+=
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\]
+
+Para una ejecución de $R$ rondas, la actividad total es
+
+\[
+N_{\mathrm{act}}
+=
+\sum_{r=0}^{R-1}
+m_r
+=
+\sum_{r=0}^{R-1}
+\sum_{y=0}^{4}
+\sum_{k=0}^{z-1}
+a_{r,y,k}.
+\]
+
+El problema de optimización estudiado consiste en minimizar
+$N_{\mathrm{act}}$ bajo la condición de que la diferencia inicial sea no
+nula.
+
+
+\subsection{Propiedades estructurales utilizadas}
+\label{subsec:propiedades_estructurales}
+
+La interpretación de los resultados utiliza las siguientes propiedades de
+Keccak:
+
+\begin{enumerate}
+    \item Las transformaciones $\theta$, $\rho$ y $\pi$ son biyectivas.
+    Por tanto, una diferencia no nula al inicio de una ronda no puede
+    convertirse en una diferencia nula antes de alcanzar la capa $\chi$:
+
+    \[
+    \Delta A_r \neq 0
+    \Longrightarrow
+    \Delta B_r \neq 0.
+    \]
+
+    \item La ronda completa de Keccak es una permutación. En consecuencia,
+    dos estados distintos continúan siendo distintos después de aplicar
+    cualquier número de rondas:
+
+    \[
+    A_r^L \neq A_r^R
+    \Longrightarrow
+    A_{r+1}^L \neq A_{r+1}^R.
+    \]
+
+    \item La transformación $\iota$ no modifica la diferencia entre las
+    dos ejecuciones porque aplica la misma constante a ambas.
+
+    \item Una diferencia no nula en $B_r$ activa necesariamente al menos
+    una aplicación local de $\chi$:
+
+    \[
+    \Delta B_r \neq 0
+    \Longrightarrow
+    m_r \geq 1.
+    \]
+\end{enumerate}
+
+Estas propiedades permiten establecer cotas inferiores básicas para una o
+varias rondas. La forma en que se incorporan al modelo MILP y se utilizan
+para certificar los resultados se desarrolla en las secciones siguientes.

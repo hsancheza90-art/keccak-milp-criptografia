@@ -1,0 +1,309 @@
+\section{Introducción}
+\label{sec:introduccion}
+
+El análisis diferencial estudia cómo las diferencias entre dos entradas se
+propagan a través de una primitiva criptográfica. Dentro de este enfoque, el
+número de componentes no lineales activados constituye un indicador
+estructural relevante: cuanto mayor sea la cantidad de componentes activos,
+mayor será la dispersión de la diferencia y, en general, más difícil resultará
+construir trayectorias diferenciales de baja complejidad
+\cite{biham1991differential}.
+
+Keccak, base del estándar SHA-3, organiza su estado como un arreglo
+tridimensional de bits y aplica en cada ronda las transformaciones
+$\theta$, $\rho$, $\pi$, $\chi$ e $\iota$
+\cite{nist_fips202,bertoni2011keccak_reference}. Las transformaciones $\theta$, $\rho$
+y $\pi$ producen difusión y reorganización del estado, mientras que $\chi$
+constituye la única capa no lineal de la ronda. La transformación $\iota$
+incorpora una constante dependiente del número de ronda.
+
+La capa $\chi$ opera localmente sobre grupos de cinco bits que comparten las
+mismas coordenadas $(y,k)$. En este trabajo, cada uno de estos grupos se
+interpreta como una S-box local de cinco bits. Una S-box se considera activa
+cuando al menos uno de sus bits de entrada presenta una diferencia no nula
+entre dos ejecuciones de Keccak.
+
+Determinar manualmente el número mínimo de S-boxes activas resulta difícil
+incluso para versiones reducidas de la permutación. Las diferencias son
+reorganizadas por las transformaciones lineales y posteriormente atraviesan
+la capa no lineal, lo que produce un espacio combinatorio que crece con el
+tamaño del estado y con el número de rondas.
+
+La Programación Lineal Entera Mixta
+(\emph{Mixed-Integer Linear Programming}, MILP) permite representar este
+problema mediante variables binarias, restricciones lineales y una función
+objetivo. Esta metodología ha sido utilizada para automatizar la búsqueda de
+características diferenciales y lineales en distintas primitivas
+criptográficas \cite{mouha2012milp,sun2014automatic}.
+
+El presente trabajo desarrolla un modelo MILP bit a bit para versiones
+reducidas de Keccak con tamaños de palabra
+
+\[
+z \in \{4,8\}.
+\]
+
+Estas configuraciones producen estados de
+
+\[
+25z
+\]
+
+bits; por tanto, se estudian estados de 100 bits para $z=4$ y de 200 bits
+para $z=8$. Debido a que existen cinco valores posibles de $y$ y $z$
+posiciones dentro de cada palabra, cada ronda contiene
+
+\[
+5z
+\]
+
+aplicaciones locales de $\chi$. En consecuencia, los experimentos consideran
+20 S-boxes por ronda para $z=4$ y 40 S-boxes por ronda para $z=8$.
+
+El modelo representa simultáneamente dos ejecuciones concretas de Keccak.
+Las diferencias se calculan mediante restricciones XOR exactas, en lugar de
+utilizar una aproximación diferencial truncada de la capa $\chi$. Esta
+decisión permite reconstruir parejas concretas de estados, verificar la
+propagación bit a bit y validar independientemente los patrones de actividad
+obtenidos.
+
+La implementación se desarrolló en Python utilizando PuLP como biblioteca
+de modelado y CBC como solver de programación entera. El análisis comprende
+una, dos y tres rondas de Keccak reducido.
+
+
+\subsection{Planteamiento del problema}
+\label{subsec:planteamiento}
+
+Sean $A_0^L$ y $A_0^R$ dos estados iniciales distintos de Keccak reducido.
+Su diferencia inicial se define como
+
+\[
+\Delta A_0 = A_0^L \oplus A_0^R,
+\]
+
+con la condición
+
+\[
+\Delta A_0 \neq 0.
+\]
+
+Durante cada ronda, ambos estados atraviesan las transformaciones
+
+\[
+\theta \longrightarrow \rho \longrightarrow \pi
+\longrightarrow \chi \longrightarrow \iota.
+\]
+
+Sea $\Delta B_r$ la diferencia entre las dos ejecuciones inmediatamente
+antes de la capa $\chi$ en la ronda $r$. Una aplicación local de $\chi$,
+identificada por las coordenadas $(y,k)$, se considera activa cuando
+
+\[
+\bigvee_{x=0}^{4} \Delta B_r[x,y,k] = 1.
+\]
+
+El problema consiste en minimizar la suma de S-boxes activas durante $R$
+rondas, bajo la condición de que los estados iniciales sean diferentes.
+
+La pregunta central del trabajo es la siguiente:
+
+\begin{quote}
+¿Cuál es el número mínimo de aplicaciones activas de la capa $\chi$ que
+puede presentar una diferencia inicial no nula al propagarse durante una,
+dos y tres rondas de Keccak reducido para $z=4$ y $z=8$?
+\end{quote}
+
+El número mínimo de S-boxes activas se denota por
+
+\[
+N_{\mathrm{act}}^{\min}(z,R),
+\]
+
+donde $z$ es el tamaño de palabra y $R$ es el número de rondas analizadas.
+
+Para una y dos rondas se busca establecer mínimos globales mediante la
+coincidencia entre una cota inferior demostrada y un testigo factible. Para
+tres rondas, debido al crecimiento del espacio combinatorio, se busca
+establecer cotas globales y construir testigos verificables mediante una
+búsqueda exhaustiva restringida.
+
+
+\subsection{Correspondencia experimental entre intentos y rondas}
+\label{subsec:intentos_rondas}
+
+La actividad académica propone relacionar tres rangos de intentos con
+experimentos de una, dos y tres rondas. En este trabajo se adopta la
+correspondencia
+
+\[
+R(t)=
+\begin{cases}
+1, & t < 10,\\
+2, & 10 \leq t < 20,\\
+3, & 20 \leq t < 30.
+\end{cases}
+\]
+
+Esta relación se utiliza exclusivamente como criterio experimental para
+seleccionar el número de rondas analizadas. El número de intentos no modifica
+las transformaciones internas de Keccak y no representa una relación
+criptográfica demostrada entre los intentos de un atacante y la profundidad
+de la permutación.
+
+Por esta razón, los resultados principales se expresan en términos del
+tamaño de palabra $z$ y del número de rondas $R$.
+
+
+\subsection{Objetivos}
+\label{subsec:objetivos}
+
+\subsubsection{Objetivo general}
+
+Modelar una versión reducida de Keccak mediante Programación Lineal Entera
+Mixta para determinar o acotar el número mínimo de S-boxes activas en una,
+dos y tres rondas, utilizando CBC como solver.
+
+
+\subsubsection{Objetivos específicos}
+
+\begin{enumerate}
+    \item Implementar las transformaciones $\theta$, $\rho$, $\pi$, $\chi$
+    e $\iota$ para estados reducidos de Keccak con tamaños de palabra
+    $z=4$ y $z=8$.
+
+    \item Construir un modelo MILP bit a bit que represente dos ejecuciones
+    simultáneas de Keccak y calcule exactamente sus diferencias mediante
+    restricciones XOR.
+
+    \item Definir variables binarias que identifiquen las aplicaciones
+    activas de $\chi$ y formular una función objetivo que minimice su
+    cantidad total.
+
+    \item Analizar configuraciones de una, dos y tres rondas, distinguiendo
+    entre mínimos globales, cotas inferiores, testigos factibles y óptimos
+    restringidos.
+
+    \item Validar los resultados mediante una implementación funcional
+    independiente, reconstrucción de testigos y pruebas automatizadas.
+\end{enumerate}
+
+
+\subsection{Contribuciones}
+\label{subsec:contribuciones}
+
+Las principales contribuciones del trabajo son las siguientes:
+
+\begin{enumerate}
+    \item Una implementación funcional de las transformaciones
+    $\theta$, $\rho$, $\pi$, $\chi$ e $\iota$ para versiones reducidas de
+    Keccak.
+
+    \item Una formulación MILP exacta que representa bit a bit dos
+    ejecuciones de la permutación y calcula sus diferencias XOR.
+
+    \item Un modelo de actividad que identifica cada aplicación local de
+    $\chi$ activa y minimiza su suma durante varias rondas.
+
+    \item La certificación de los mínimos globales
+
+    \[
+    N_{\mathrm{act}}^{\min}(4,1)
+    =
+    N_{\mathrm{act}}^{\min}(8,1)
+    =
+    1
+    \]
+
+    para una ronda, y
+
+    \[
+    N_{\mathrm{act}}^{\min}(4,2)
+    =
+    N_{\mathrm{act}}^{\min}(8,2)
+    =
+    4
+    \]
+
+    para dos rondas.
+
+    \item La obtención de las cotas globales
+
+    \[
+    5
+    \leq
+    N_{\mathrm{act}}^{\min}(4,3)
+    \leq
+    13
+    \]
+
+    y
+
+    \[
+    5
+    \leq
+    N_{\mathrm{act}}^{\min}(8,3)
+    \leq
+    14
+    \]
+
+    para tres rondas.
+
+    \item La construcción de testigos con distribuciones de actividad
+
+    \[
+    2+2+9
+    \]
+
+    para $z=4$ y
+
+    \[
+    2+2+10
+    \]
+
+    para $z=8$. Estos testigos son óptimos dentro de la familia restringida
+    $2+2+c$ y proporcionan cotas superiores válidas para el problema
+    global.
+
+    \item Una estrategia de validación que contrasta las soluciones del
+    modelo con una implementación funcional independiente y permite
+    reconstruir los estados, las diferencias y los soportes activos.
+\end{enumerate}
+
+
+\subsection{Alcance}
+\label{subsec:alcance}
+
+El estudio se limita a versiones reducidas de Keccak con tamaños de palabra
+
+\[
+z \in \{4,8\}
+\]
+
+y a un máximo de tres rondas. Estas configuraciones conservan la estructura
+de la permutación, pero no corresponden a la instancia completa
+Keccak-$f[1600]$ utilizada por SHA-3.
+
+La variable principal es el número de aplicaciones activas de la capa
+$\chi$. Esta medida permite estudiar la propagación estructural de una
+diferencia, pero no determina por sí sola la probabilidad de una
+característica diferencial. El modelo no incorpora los pesos de las
+transiciones diferenciales locales ni estima directamente la complejidad
+de un ataque contra SHA-3.
+
+Los resultados de una y dos rondas corresponden a mínimos globales
+certificados. Para tres rondas, los valores 13 y 14 no se presentan como
+mínimos globales. Estos valores son los mejores resultados obtenidos dentro
+de la familia restringida
+
+\[
+2+2+c
+\]
+
+y deben interpretarse como cotas superiores globales respaldadas por
+testigos concretos.
+
+En consecuencia, el aporte del trabajo consiste en formular, resolver y
+validar el problema de minimización de S-boxes activas para las
+configuraciones reducidas consideradas, sin extender las conclusiones más
+allá de las evidencias matemáticas y experimentales disponibles.

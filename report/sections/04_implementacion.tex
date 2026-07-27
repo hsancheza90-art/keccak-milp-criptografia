@@ -1,0 +1,416 @@
+\section{Arquitectura e implementación}
+\label{sec:arquitectura_implementacion}
+
+La implementación se desarrolló en Python siguiendo una arquitectura
+modular que separa la especificación funcional de Keccak, la formulación
+MILP, la búsqueda de trayectorias, la validación de testigos y la
+generación de resultados.
+
+Esta separación permite contrastar las soluciones del solver con una
+implementación que no depende del modelo de optimización. De este modo,
+el valor objetivo informado por CBC no se acepta de manera aislada, sino
+que se verifica mediante la reconstrucción completa de los estados y de
+sus diferencias.
+
+PuLP se utilizó como biblioteca de modelado y CBC como solver de
+programación lineal entera mixta
+\cite{pulp_docs,cbc_guide}.
+
+
+\subsection{Arquitectura general}
+\label{subsec:arquitectura_general}
+
+El flujo de trabajo se organiza en cinco etapas:
+
+\begin{enumerate}
+    \item implementar las transformaciones de Keccak reducido mediante
+    funciones binarias de referencia;
+
+    \item construir el modelo MILP exacto para dos ejecuciones simultáneas;
+
+    \item incorporar las diferencias XOR, las variables de actividad y la
+    función objetivo;
+
+    \item resolver los experimentos mediante CBC o mediante una búsqueda
+    restringida para tres rondas;
+
+    \item reconstruir y validar los testigos con la implementación
+    funcional independiente.
+\end{enumerate}
+
+El flujo puede resumirse como
+
+\[
+\text{Keccak de referencia}
+\longrightarrow
+\text{modelo MILP pareado}
+\longrightarrow
+\text{búsqueda de soluciones}
+\longrightarrow
+\text{reconstrucción}
+\longrightarrow
+\text{validación}.
+\]
+
+La arquitectura distingue claramente entre la obtención de una solución
+y su comprobación. Esto reduce el riesgo de aceptar resultados producidos
+por errores en la formulación, en la extracción de variables o en la
+interpretación del estado del solver.
+
+
+\subsection{Componentes principales}
+\label{subsec:componentes_principales}
+
+La Tabla~\ref{tab:componentes_implementacion} resume los componentes
+principales del proyecto.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Componentes principales de la implementación.}
+    \label{tab:componentes_implementacion}
+    \begin{tabular}{p{0.31\textwidth}p{0.61\textwidth}}
+        \hline
+        \textbf{Componente} & \textbf{Responsabilidad} \\
+        \hline
+
+        Implementación de referencia
+        &
+        Ejecuta las transformaciones $\theta$, $\rho$, $\pi$, $\chi$ e
+        $\iota$ directamente sobre arreglos binarios.
+        \\[3pt]
+
+        Modelo MILP de Keccak
+        &
+        Representa cada transformación mediante variables binarias,
+        restricciones XOR, permutaciones y linealizaciones de productos.
+        \\[3pt]
+
+        Modelo diferencial pareado
+        &
+        Construye dos ejecuciones simultáneas y calcula las diferencias
+        exactas en las fronteras de cada ronda.
+        \\[3pt]
+
+        Modelo de S-boxes activas
+        &
+        Incorpora las variables $a_{r,y,k}$, la función objetivo y las
+        restricciones auxiliares para cotas, soportes y conteos por ronda.
+        \\[3pt]
+
+        Búsqueda restringida
+        &
+        Explora exhaustivamente trayectorias de tres rondas pertenecientes
+        a la familia $2+2+c$.
+        \\[3pt]
+
+        Ejecutor experimental
+        &
+        Ejecuta los seis escenarios, almacena los resultados y genera los
+        artefactos necesarios para su análisis.
+        \\[3pt]
+
+        Pruebas automatizadas
+        &
+        Verifican transformaciones, restricciones, testigos, búsquedas y
+        archivos de salida.
+        \\
+        \hline
+    \end{tabular}
+\end{table}
+
+
+\subsection{Implementación funcional de referencia}
+\label{subsec:implementacion_referencia}
+
+La implementación de referencia opera directamente sobre estados
+binarios y reproduce el orden completo de una ronda:
+
+\[
+A_r
+\xrightarrow{\theta}
+T_r
+\xrightarrow{\rho}
+R_r
+\xrightarrow{\pi}
+B_r
+\xrightarrow{\chi}
+C_r
+\xrightarrow{\iota}
+A_{r+1}.
+\]
+
+Sus funciones se utilizan como una especificación independiente del
+modelo MILP. En particular, permiten:
+
+\begin{itemize}
+    \item comprobar las transformaciones individuales;
+    \item ejecutar una o varias rondas completas;
+    \item reconstruir los estados obtenidos mediante el solver;
+    \item recalcular las diferencias antes de cada aplicación de $\chi$;
+    \item verificar el número de S-boxes activas por ronda.
+\end{itemize}
+
+La existencia de esta implementación independiente es importante porque
+una solución MILP puede ser matemáticamente consistente con un modelo
+incorrectamente programado. La comparación bit a bit permite detectar
+este tipo de errores.
+
+
+\subsection{Modelo MILP pareado}
+\label{subsec:implementacion_modelo_pareado}
+
+El modelo contiene dos copias de la permutación reducida:
+
+\[
+A_r^L
+\qquad \text{y} \qquad
+A_r^R.
+\]
+
+Cada ejecución satisface las restricciones exactas de las
+transformaciones de Keccak. A partir de ambas copias se calculan las
+diferencias
+
+\[
+\Delta A_r
+=
+A_r^L \oplus A_r^R,
+\]
+
+y
+
+\[
+\Delta B_r
+=
+B_r^L \oplus B_r^R.
+\]
+
+La clase que incorpora la minimización de actividad extiende este modelo
+con las variables
+
+\[
+a_{r,y,k},
+\]
+
+que identifican las aplicaciones activas de $\chi$.
+
+Además de la función objetivo global, la implementación permite:
+
+\begin{itemize}
+    \item imponer una cota sobre la actividad total;
+    \item fijar el número de S-boxes activas en una ronda;
+    \item fijar un soporte activo concreto;
+    \item fijar los estados iniciales izquierdo y derecho;
+    \item extraer los estados y soportes de una solución.
+\end{itemize}
+
+Estas operaciones se utilizan tanto para resolver los problemas de
+optimización como para validar candidatos generados por otros
+procedimientos.
+
+
+\subsection{Búsqueda restringida para tres rondas}
+\label{subsec:busqueda_restringida_implementacion}
+
+La resolución directa del modelo global de tres rondas presenta un
+crecimiento considerable del espacio combinatorio. Para obtener testigos
+reproducibles se implementó una búsqueda restringida a trayectorias con
+actividad
+
+\[
+2+2+c.
+\]
+
+La elección de esta familia parte del resultado exacto de dos rondas:
+existen trayectorias globalmente óptimas con dos S-boxes activas en cada
+ronda. La búsqueda analiza cómo pueden extenderse estas trayectorias hacia
+una tercera ronda.
+
+Para cada trayectoria compatible con actividad $2+2$, se enumeran las
+realizaciones concretas de las dos S-boxes activas en la segunda ronda.
+Cada S-box local contiene cinco bits y, por tanto, admite
+
+\[
+2^5=32
+\]
+
+valores absolutos posibles. Al existir dos S-boxes activas se evalúan
+
+\[
+32^2=1024
+\]
+
+realizaciones por trayectoria.
+
+La búsqueda sigue el procedimiento:
+
+\begin{enumerate}
+    \item generar los soportes compatibles con actividad $2+2$;
+
+    \item construir las realizaciones absolutas de las S-boxes activas;
+
+    \item propagar cada realización hacia la tercera ronda;
+
+    \item calcular el soporte de entrada a $\chi$ en dicha ronda;
+
+    \item conservar los candidatos con menor actividad total;
+
+    \item reconstruir los mejores candidatos mediante la implementación
+    de referencia.
+\end{enumerate}
+
+El procedimiento es exhaustivo dentro de la familia $2+2+c$, pero no
+dentro del espacio completo de trayectorias de tres rondas. Esta
+distinción se mantiene en la interpretación de los resultados.
+
+
+\subsection{Ejecución de los experimentos}
+\label{subsec:ejecucion_experimentos}
+
+El ejecutor principal procesa las configuraciones
+
+\[
+(z,R)
+\in
+\{
+(4,1),
+(4,2),
+(4,3),
+(8,1),
+(8,2),
+(8,3)
+\}.
+\]
+
+La implementación dispone de dos modalidades:
+
+\begin{description}
+    \item[Modo rápido.] Utiliza los resultados permanentes de las
+    búsquedas costosas y regenera las tablas, los testigos y las figuras.
+
+    \item[Modo completo.] Repite la búsqueda restringida de tres rondas
+    y reconstruye los resultados desde las trayectorias enumeradas.
+\end{description}
+
+Los resultados se almacenan en formatos estructurados para evitar la
+transcripción manual de valores. Los artefactos principales contienen:
+
+\begin{itemize}
+    \item la matriz consolidada de los seis experimentos;
+    \item los estados y soportes de los testigos;
+    \item las cotas inferiores y superiores;
+    \item la información del entorno de ejecución;
+    \item la figura comparativa de resultados.
+\end{itemize}
+
+Los nombres y comandos concretos de reproducción se presentan en la
+Sección~\ref{sec:reproducibilidad}.
+
+
+\subsection{Estrategia de validación}
+\label{subsec:estrategia_validacion}
+
+La validación se realiza en cuatro niveles.
+
+
+\subsubsection{Validación de transformaciones}
+
+Las funciones de referencia se verifican mediante casos deterministas y
+propiedades estructurales. Se comprueban las dimensiones de los estados,
+la aritmética modular de los índices y la correspondencia entre las
+transformaciones individuales y la ronda completa.
+
+
+\subsubsection{Validación del modelo MILP}
+
+Para estados fijados, se comparan las variables del modelo con la
+implementación de referencia. La validación comprueba que:
+
+\begin{enumerate}
+    \item los estados intermedios coincidan bit a bit;
+    \item las diferencias XOR sean correctas;
+    \item la salida de $\chi$ corresponda a su definición booleana;
+    \item las variables de actividad coincidan con los soportes de
+    $\Delta B_r$;
+    \item la suma de actividades coincida con el valor objetivo.
+\end{enumerate}
+
+
+\subsubsection{Validación de testigos}
+
+Cada testigo contiene los estados iniciales
+
+\[
+A_0^L
+\qquad \text{y} \qquad
+A_0^R.
+\]
+
+A partir de estos estados se ejecutan nuevamente las rondas y se calculan
+los soportes
+
+\[
+S_r
+=
+\left\{
+(y,k):
+\bigvee_{x=0}^{4}
+\Delta B_r[x,y,k]=1
+\right\}.
+\]
+
+El testigo se acepta únicamente cuando
+
+\[
+m_r=|S_r|
+\]
+
+coincide con la actividad almacenada para cada ronda y la suma
+
+\[
+\sum_{r=0}^{R-1}m_r
+\]
+
+coincide con la actividad total reportada.
+
+
+\subsubsection{Validación automatizada}
+
+La suite de pruebas cubre la implementación funcional, el modelo MILP,
+las búsquedas, la reconstrucción de testigos y la generación de
+artefactos.
+
+En la versión utilizada para el informe se aprobaron
+
+\[
+245
+\]
+
+pruebas automatizadas. Este número se presenta como evidencia de cobertura
+del proyecto, no como una demostración formal de corrección completa del
+software.
+
+
+\subsection{Criterio de aceptación de resultados}
+\label{subsec:criterio_aceptacion_resultados}
+
+Un resultado se incorpora a las conclusiones únicamente cuando satisface
+las siguientes condiciones:
+
+\begin{enumerate}
+    \item el estado del solver permite una interpretación matemática
+    válida;
+
+    \item existe un testigo reconstruible cuando se afirma factibilidad;
+
+    \item la implementación de referencia reproduce la actividad
+    reportada;
+
+    \item las cotas y los niveles de optimalidad se presentan sin exceder
+    la evidencia disponible.
+\end{enumerate}
+
+Por tanto, una solución encontrada por CBC se interpreta como cota
+superior mientras no exista una prueba de optimalidad. De forma análoga,
+los mejores resultados de la búsqueda $2+2+c$ se consideran óptimos
+restringidos y no mínimos globales de tres rondas.

@@ -1,0 +1,333 @@
+﻿\section{Validación y reproducibilidad}
+\label{sec:reproducibilidad}
+
+Los resultados se acompañan de una cadena de validación que incluye una
+implementación funcional independiente, pruebas automatizadas, testigos
+reconstruibles, archivos estructurados y versiones identificables mediante
+Git.
+
+El propósito de esta sección es describir los elementos necesarios para
+verificar las afirmaciones principales del trabajo sin repetir los detalles
+de arquitectura presentados en la
+Sección~\ref{sec:arquitectura_implementacion}.
+
+
+\subsection{Entorno computacional}
+\label{subsec:entorno_computacional}
+
+La implementación se desarrolló en el entorno resumido en la
+Tabla~\ref{tab:entorno_computacional}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Entorno utilizado en los experimentos.}
+    \label{tab:entorno_computacional}
+    \begin{tabular}{p{0.30\textwidth}p{0.60\textwidth}}
+        \hline
+        \textbf{Componente} & \textbf{Configuración} \\
+        \hline
+        Sistema operativo & Microsoft Windows 10 \\
+        Lenguaje & Python 3.12.10 \\
+        Modelado matemático & PuLP \\
+        Solver & CBC mediante la interfaz de PuLP \\
+        Control de versiones & Git y GitHub \\
+        Informe & \LaTeX, \texttt{biblatex} y Biber \\
+        \hline
+    \end{tabular}
+\end{table}
+
+La información específica de cada ejecución se almacena en
+
+\begin{center}
+\texttt{outputs/results/experiment\_environment.json}.
+\end{center}
+
+Este archivo registra las versiones disponibles, el modo de ejecución y
+los datos de trazabilidad del experimento. Los tiempos observados se
+consideran referencias operativas y pueden variar según el equipo, la
+versión del solver y la carga del sistema.
+
+
+\subsection{Procedimiento de reproducción}
+\label{subsec:procedimiento_reproduccion}
+
+Desde la raíz del repositorio, la reproducción mínima requiere ejecutar
+la suite de pruebas y regenerar los artefactos experimentales:
+
+\begin{verbatim}
+python -m pytest -q --disable-warnings
+python scripts/run_active_sbox_experiments.py --mode quick
+\end{verbatim}
+
+El modo \texttt{quick} utiliza los resultados permanentes de las búsquedas
+más costosas y regenera:
+
+\begin{itemize}
+    \item la tabla consolidada de experimentos;
+    \item los testigos almacenados;
+    \item el resumen de resultados;
+    \item la información del entorno;
+    \item la figura comparativa de cotas.
+\end{itemize}
+
+Para repetir desde cero la búsqueda restringida de tres rondas se utiliza:
+
+\begin{verbatim}
+python scripts/run_active_sbox_experiments.py --mode full
+\end{verbatim}
+
+Este modo vuelve a evaluar las trayectorias de la familia
+
+\[
+2+2+c
+\]
+
+para $z=4$ y $z=8$.
+
+El informe se compila desde la carpeta \texttt{report/} mediante:
+
+\begin{verbatim}
+latexmk -pdf -interaction=nonstopmode -halt-on-error main.tex
+\end{verbatim}
+
+Si la bibliografía se gestiona mediante Biber, \texttt{latexmk} ejecuta
+automáticamente las etapas necesarias siempre que el archivo
+\texttt{.bcf} se haya generado correctamente.
+
+
+\subsection{Pruebas automatizadas}
+\label{subsec:pruebas_automatizadas}
+
+La suite global de la versión utilizada en el informe alcanzó
+
+\[
+245
+\]
+
+pruebas aprobadas.
+
+Las pruebas cubren los siguientes aspectos:
+
+\begin{itemize}
+    \item transformaciones individuales de Keccak reducido;
+    \item composición de rondas completas;
+    \item restricciones XOR y productos binarios;
+    \item correspondencia entre la implementación funcional y el modelo
+    MILP;
+    \item cálculo de diferencias y soportes activos;
+    \item restricciones de actividad total y actividad por ronda;
+    \item búsqueda restringida de trayectorias $2+2+c$;
+    \item reconstrucción de testigos;
+    \item generación y lectura de los artefactos experimentales.
+\end{itemize}
+
+La aprobación de las pruebas reduce el riesgo de errores de implementación,
+pero no constituye una demostración formal de corrección completa del
+software.
+
+Durante la ejecución pueden aparecer advertencias de PuLP relacionadas con
+interfaces marcadas para futura obsolescencia. Estas advertencias no
+corresponden a fallos de factibilidad, optimalidad o reconstrucción de los
+resultados.
+
+
+\subsection{Reconstrucción de testigos}
+\label{subsec:reconstruccion_testigos}
+
+Cada testigo utilizado en los resultados contiene información suficiente
+para recuperar los estados iniciales
+
+\[
+A_0^L
+\qquad \text{y} \qquad
+A_0^R.
+\]
+
+A partir de estos estados se ejecutan nuevamente las rondas mediante la
+implementación funcional. Para cada ronda se calcula
+
+\[
+\Delta B_r
+=
+B_r^L \oplus B_r^R
+\]
+
+y se reconstruye el soporte activo
+
+\[
+S_r
+=
+\left\{
+(y,k):
+\bigvee_{x=0}^{4}
+\Delta B_r[x,y,k]=1
+\right\}.
+\]
+
+La actividad por ronda se obtiene como
+
+\[
+m_r=|S_r|.
+\]
+
+Un testigo se considera validado cuando se cumplen simultáneamente las
+siguientes condiciones:
+
+\begin{enumerate}
+    \item los estados intermedios coinciden con las transformaciones de
+    referencia;
+
+    \item las diferencias almacenadas coinciden con los XOR reconstruidos;
+
+    \item los soportes activos coinciden con las posiciones no nulas de
+    $\Delta B_r$;
+
+    \item la suma
+
+    \[
+    \sum_{r=0}^{R-1}m_r
+    \]
+
+    coincide con la actividad total reportada;
+
+    \item los estados y soportes son consistentes con las restricciones del
+    modelo MILP.
+\end{enumerate}
+
+Esta reconstrucción permite verificar independientemente los resultados
+exactos de una y dos rondas y los testigos utilizados como cotas superiores
+en tres rondas.
+
+
+\subsection{Artefactos experimentales}
+\label{subsec:artefactos_experimentales}
+
+Los resultados se almacenan en archivos estructurados para evitar la
+transcripción manual de valores. La
+Tabla~\ref{tab:artefactos_experimentales} resume los artefactos principales.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Artefactos principales para reproducción y auditoría.}
+    \label{tab:artefactos_experimentales}
+    \begin{tabular}{p{0.42\textwidth}p{0.50\textwidth}}
+        \hline
+        \textbf{Artefacto} & \textbf{Contenido} \\
+        \hline
+
+        \texttt{active\_sbox\_results.csv}
+        &
+        Cotas, actividades y clasificación de los seis experimentos.
+        \\[3pt]
+
+        \texttt{active\_sbox\_witnesses.json}
+        &
+        Estados, diferencias y soportes necesarios para reconstruir los
+        testigos.
+        \\[3pt]
+
+        \texttt{active\_sbox\_summary.md}
+        &
+        Resumen legible de los resultados principales.
+        \\[3pt]
+
+        \texttt{experiment\_environment.json}
+        &
+        Versiones, modo de ejecución y datos del entorno.
+        \\[3pt]
+
+        \texttt{active\_sbox\_bounds.png}
+        &
+        Comparación gráfica de las cotas inferiores y superiores.
+        \\[3pt]
+
+        \texttt{keccak\_milp\_active\_sboxes.ipynb}
+        &
+        Notebook ejecutable con tablas, figura y comprobaciones dirigidas.
+        \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Los archivos de resultados se encuentran dentro de
+\texttt{outputs/results/}, la figura dentro de
+\texttt{outputs/figures/} y el notebook dentro de
+\texttt{notebooks/}.
+
+La separación entre resultados numéricos, testigos y datos del entorno
+facilita la auditoría y permite reutilizar los artefactos desde otros
+scripts.
+
+
+\subsection{Validación del notebook}
+\label{subsec:validacion_notebook}
+
+El notebook final fue ejecutado completamente antes de generar la versión
+utilizada en el informe. La revisión comprobó que:
+
+\begin{itemize}
+    \item no existieran errores almacenados;
+    \item todas las celdas de código hubieran sido ejecutadas;
+    \item estuvieran incluidos los resultados para $z=4$ y $z=8$;
+    \item aparecieran los testigos de tres rondas;
+    \item las tablas y la figura coincidieran con los archivos generados
+    por el ejecutor experimental.
+\end{itemize}
+
+El notebook funciona como una interfaz de inspección de los resultados,
+pero los valores principales provienen de los archivos estructurados
+generados por los scripts del proyecto.
+
+
+\subsection{Trazabilidad mediante Git}
+\label{subsec:trazabilidad_git}
+
+La versión experimental utilizada en este informe se identifica mediante:
+
+\begin{itemize}
+    \item repositorio:
+
+    \begin{center}
+    \url{https://github.com/hsancheza90-art/keccak-milp-criptografia}
+    \end{center}
+
+    \item etiqueta:
+
+    \begin{center}
+    \texttt{keccak-milp-experiments-v1}
+    \end{center}
+
+    \item commit:
+
+    \begin{center}
+    \texttt{0b089aa}
+    \end{center}
+\end{itemize}
+
+La etiqueta identifica un estado estable del proyecto y permite separar los
+resultados utilizados en el informe de cambios posteriores realizados en la
+rama de desarrollo.
+
+
+\subsection{Alcance de la reproducibilidad}
+\label{subsec:alcance_reproducibilidad}
+
+El modo rápido permite regenerar los resultados permanentes y verificar la
+cadena completa de archivos sin repetir las enumeraciones de mayor costo.
+El modo completo vuelve a ejecutar la búsqueda restringida de tres rondas.
+
+En ambos casos pueden verificarse:
+
+\begin{itemize}
+    \item los mínimos globales de una ronda;
+    \item los mínimos globales de dos rondas;
+    \item las cotas inferiores de tres rondas;
+    \item los testigos $2+2+9$ y $2+2+10$;
+    \item la consistencia entre los archivos, el notebook y el informe.
+\end{itemize}
+
+La reproducibilidad no implica que los tiempos de ejecución sean idénticos
+en todos los equipos. Tampoco convierte los testigos de tres rondas en
+óptimos globales. Su propósito es garantizar que las afirmaciones puedan
+ser reconstruidas y contrastadas a partir del código y de los artefactos
+publicados.

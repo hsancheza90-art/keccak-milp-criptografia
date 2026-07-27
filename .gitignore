@@ -53,4 +53,17 @@ Thumbs.db
 # RESULTADOS TEMPORALES
 # ============================================================
 results/logs/*.log
-results/raw/*.tmp
+results/raw/*.tmp*.aux
+*.bcf
+*.blg
+*.bbl
+*.fdb_latexmk
+*.fls
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*-SAVE-ERROR
+*.encoding-backup

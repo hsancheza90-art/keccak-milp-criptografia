@@ -1,0 +1,337 @@
+﻿\section{Limitaciones y amenazas a la validez}
+\label{sec:limitaciones}
+
+Los resultados deben interpretarse dentro del alcance del modelo, de las
+configuraciones reducidas analizadas y del nivel de certificación alcanzado
+en cada experimento. Esta sección resume las principales limitaciones
+criptográficas, matemáticas y computacionales del trabajo.
+
+
+\subsection{Alcance de las configuraciones reducidas}
+\label{subsec:alcance_configuraciones_reducidas}
+
+El estudio considera tamaños de palabra
+
+\[
+z \in \{4,8\},
+\]
+
+correspondientes a estados de 100 y 200 bits. Estas configuraciones
+conservan la organización tridimensional de Keccak y la secuencia de
+transformaciones
+
+\[
+\theta,
+\quad
+\rho,
+\quad
+\pi,
+\quad
+\chi,
+\quad
+\iota,
+\]
+
+pero no corresponden a la instancia Keccak-$f[1600]$ utilizada por SHA-3.
+
+Por tanto, los resultados no deben interpretarse como una evaluación
+directa de la seguridad de SHA-3 ni como mínimos aplicables
+automáticamente a tamaños de palabra mayores. Su finalidad es estudiar la
+formulación MILP y la propagación de diferencias en configuraciones
+computacionalmente manejables.
+
+De forma similar, el análisis se limita a un máximo de tres rondas. El
+crecimiento de las variables binarias, las restricciones auxiliares y el
+espacio de ramificación dificulta extender directamente la formulación a
+más rondas mediante CBC.
+
+
+\subsection{Alcance de la métrica de actividad}
+\label{subsec:alcance_metrica_actividad}
+
+La variable principal es el número de aplicaciones locales de $\chi$ que
+reciben una diferencia de entrada no nula. Esta medida permite cuantificar
+la cantidad de componentes no lineales atravesados por una trayectoria,
+pero no representa por sí sola su probabilidad diferencial.
+
+Dos trayectorias con el mismo número de S-boxes activas pueden contener
+transiciones locales diferentes y, en consecuencia, presentar
+probabilidades distintas. El modelo tampoco calcula directamente:
+
+\begin{itemize}
+    \item el peso diferencial de cada transición de $\chi$;
+    \item la probabilidad acumulada de una trayectoria;
+    \item el número de características compatibles con un mismo soporte;
+    \item correlaciones lineales;
+    \item la complejidad de un ataque contra SHA-3.
+\end{itemize}
+
+En consecuencia, la minimización de actividad identifica trayectorias
+estructuralmente poco dispersas, pero no garantiza que sean las
+trayectorias diferenciales más probables.
+
+Una extensión natural consistiría en incorporar pesos asociados a las
+transiciones diferenciales de $\chi$ y minimizar el peso total, en lugar
+de utilizar únicamente indicadores binarios de actividad.
+
+
+\subsection{Brecha de certificación en tres rondas}
+\label{subsec:limitacion_tres_rondas}
+
+El nivel de certificación no es igual para todos los experimentos.
+
+Para una y dos rondas se obtuvo una coincidencia entre las cotas inferiores
+y los testigos factibles. Por tanto, los valores reportados corresponden a
+mínimos globales.
+
+Para tres rondas solo se dispone de los intervalos
+
+\[
+5
+\leq
+N_{\mathrm{act}}^{\min}(4,3)
+\leq
+13,
+\]
+
+y
+
+\[
+5
+\leq
+N_{\mathrm{act}}^{\min}(8,3)
+\leq
+14.
+\]
+
+Las cotas inferiores son globales y los extremos superiores están
+respaldados por testigos concretos. Sin embargo, no se demostró que no
+existan trayectorias con actividades comprendidas dentro de estos
+intervalos.
+
+Por esta razón, los valores 13 y 14 no constituyen mínimos globales
+certificados.
+
+
+\subsubsection{Restricción de la familia \texorpdfstring{$2+2+c$}{2+2+c}}
+
+La búsqueda de tres rondas se restringió a trayectorias cuya actividad en
+las dos primeras rondas es
+
+\[
+2+2.
+\]
+
+Dentro de esta familia, la enumeración fue exhaustiva y produjo los mejores
+valores
+
+\[
+2+2+9=13
+\]
+
+para $z=4$, y
+
+\[
+2+2+10=14
+\]
+
+para $z=8$.
+
+No obstante, una trayectoria globalmente mejor podría presentar una
+distribución diferente, por ejemplo,
+
+\[
+1+a+b,
+\qquad
+3+a+b,
+\qquad
+m_0+m_1+m_2,
+\]
+
+siempre que satisfaga las restricciones exactas de propagación.
+
+En consecuencia, la afirmación correcta es:
+
+\begin{quote}
+La búsqueda es exhaustiva dentro de la familia $2+2+c$, pero no dentro
+del espacio completo de trayectorias de tres rondas.
+\end{quote}
+
+Cerrar los intervalos requeriría explorar otras distribuciones de actividad,
+fortalecer la formulación MILP o emplear métodos de descomposición más
+generales.
+
+
+\subsection{Dependencia del solver y del entorno}
+\label{subsec:dependencia_solver_entorno}
+
+CBC permitió resolver los casos de una y dos rondas, validar testigos y
+demostrar la infactibilidad de determinados problemas auxiliares. Sin
+embargo, su capacidad de certificación disminuye al aumentar el tamaño del
+modelo.
+
+El crecimiento de $z$ y $R$ incrementa:
+
+\begin{itemize}
+    \item las variables de los estados izquierdo y derecho;
+    \item las variables de diferencia;
+    \item las variables auxiliares para XOR y productos;
+    \item las restricciones de cada transformación;
+    \item el espacio explorado mediante ramificación y acotación.
+\end{itemize}
+
+Una terminación por límite de tiempo no demuestra que el modelo sea
+infactible ni que la mejor solución encontrada sea óptima. En este trabajo
+solo se utilizan como certificadas las conclusiones respaldadas por un
+estado concluyente del solver o por un testigo reconstruido
+independientemente.
+
+El uso de un solver comercial, como Gurobi, podría reducir los tiempos de
+resolución mediante mejores procedimientos de \emph{presolve}, cortes,
+heurísticas y paralelización. No obstante, un solver más rápido no elimina
+la necesidad de distinguir entre:
+
+\begin{itemize}
+    \item una solución factible;
+    \item una cota inferior;
+    \item una prueba de infactibilidad;
+    \item una prueba de optimalidad global.
+\end{itemize}
+
+Los tiempos de ejecución también dependen del procesador, la memoria, las
+versiones de Python, PuLP y CBC, y la carga concurrente del sistema. Por
+ello, se reportan como referencias de reproducibilidad y no como una
+comparación formal de rendimiento.
+
+
+\subsection{Validez de la implementación}
+\label{subsec:validez_implementacion}
+
+La validez interna se fortalece mediante:
+
+\begin{itemize}
+    \item una implementación funcional independiente;
+    \item comparación bit a bit entre la referencia y el modelo MILP;
+    \item reconstrucción de estados, diferencias y soportes;
+    \item generación automática de resultados;
+    \item pruebas unitarias y de integración;
+    \item control de versiones y testigos almacenados.
+\end{itemize}
+
+Estas medidas reducen el riesgo de aceptar resultados producidos por
+errores de programación o de extracción de variables. Sin embargo, como en
+cualquier implementación computacional, las pruebas automatizadas no
+constituyen una demostración formal de la corrección total del software.
+
+Los testigos almacenados demuestran la existencia de trayectorias con una
+actividad determinada, pero no describen todas las soluciones con el mismo
+valor. Pueden existir diferentes soportes, estados absolutos o soluciones
+relacionadas mediante simetrías que produzcan la misma actividad.
+
+Por tanto, los testigos deben interpretarse como certificados de
+factibilidad y no como representantes únicos de todas las trayectorias
+óptimas o cuasi-óptimas.
+
+
+\subsection{Correspondencia entre intentos y rondas}
+\label{subsec:limitacion_intentos_rondas}
+
+La relación
+
+\[
+R(t)=
+\begin{cases}
+1, & t<10,\\
+2, & 10\leq t<20,\\
+3, & 20\leq t<30
+\end{cases}
+\]
+
+se incorporó para responder al planteamiento de la actividad académica.
+
+Esta relación no pertenece a la definición de Keccak y no representa una
+conexión criptográfica demostrada entre el número de intentos de un
+atacante y el número de rondas de la permutación. En la implementación,
+los intentos funcionan únicamente como un parámetro externo para seleccionar
+uno de los tres escenarios experimentales.
+
+Por esta razón, las conclusiones se expresan principalmente en términos de
+$z$ y $R$, y no como una relación general entre intentos y seguridad.
+
+
+\subsection{Síntesis de las amenazas a la validez}
+\label{subsec:sintesis_amenazas}
+
+La Tabla~\ref{tab:amenazas_validez} resume las principales amenazas y las
+medidas adoptadas para reducirlas.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Principales amenazas a la validez y medidas de mitigación.}
+    \label{tab:amenazas_validez}
+    \begin{tabular}{
+        p{0.24\textwidth}
+        p{0.31\textwidth}
+        p{0.35\textwidth}
+    }
+        \hline
+        \textbf{Amenaza}
+        &
+        \textbf{Consecuencia}
+        &
+        \textbf{Mitigación}
+        \\
+        \hline
+
+        Tamaños y rondas reducidos
+        &
+        Los resultados no se trasladan automáticamente a Keccak-$f[1600]$.
+        &
+        Delimitación explícita del alcance y uso de configuraciones
+        estructuralmente válidas.
+        \\[4pt]
+
+        Métrica basada en actividad
+        &
+        No se obtiene la probabilidad diferencial completa.
+        &
+        Interpretación estructural y propuesta de incorporar pesos
+        diferenciales.
+        \\[4pt]
+
+        Brecha en tres rondas
+        &
+        No se conoce el mínimo global exacto.
+        &
+        Reporte mediante intervalos y distinción entre cotas y óptimos.
+        \\[4pt]
+
+        Búsqueda $2+2+c$
+        &
+        Pueden existir mejores distribuciones fuera de la familia.
+        &
+        Declaración explícita de la restricción y conservación de los
+        testigos como cotas superiores globales.
+        \\[4pt]
+
+        Dependencia del solver
+        &
+        Los tiempos y la capacidad de certificación pueden variar.
+        &
+        Uso exclusivo de estados certificados y validación independiente.
+        \\[4pt]
+
+        Errores de implementación
+        &
+        Una formulación incorrecta podría producir resultados inválidos.
+        &
+        Implementación de referencia, pruebas automatizadas y
+        reconstrucción de testigos.
+        \\
+        \hline
+    \end{tabular}
+\end{table}
+
+Estas limitaciones no invalidan los resultados obtenidos. Definen el
+contexto dentro del cual pueden considerarse correctos y evitan extender
+las conclusiones más allá de la evidencia disponible.

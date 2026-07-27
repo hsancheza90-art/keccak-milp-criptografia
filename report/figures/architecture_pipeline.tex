@@ -1,0 +1,71 @@
+﻿\begin{tikzpicture}[
+    node distance=6mm,
+    every node/.style={
+        font=\small
+    },
+    block/.style={
+        rectangle,
+        draw=black!55,
+        rounded corners=2pt,
+        fill=black!3,
+        text width=0.78\textwidth,
+        minimum height=10mm,
+        align=center,
+        inner sep=5pt
+    },
+    arrow/.style={
+        -{Latex[length=2.2mm]},
+        line width=0.7pt,
+        draw=black!70
+    }
+]
+
+\node[block] (reference) {
+    \textbf{Implementación de referencia}\\
+    Transformaciones $\theta$, $\rho$, $\pi$, $\chi$, $\iota$
+    y composición de rondas
+};
+
+\node[block, below=of reference] (milp) {
+    \textbf{Modelo MILP bit a bit}\\
+    Variables binarias, restricciones XOR y representación exacta
+    de cada transformación
+};
+
+\node[block, below=of milp] (paired) {
+    \textbf{Modelo diferencial pareado}\\
+    Dos ejecuciones concretas y cálculo exacto de
+    $\Delta A_r$ y $\Delta B_r$
+};
+
+\node[block, below=of paired] (activity) {
+    \textbf{Modelo de actividad de $\chi$}\\
+    Variables $a_{r,y,k}$, función objetivo y restricciones
+    por ronda
+};
+
+\node[block, below=of activity] (search) {
+    \textbf{Búsqueda y construcción de testigos}\\
+    Optimización con CBC y enumeración restringida de trayectorias
+    $2+2+c$
+};
+
+\node[block, below=of search] (validation) {
+    \textbf{Validación independiente}\\
+    Reconstrucción de estados, comparación con la implementación
+    de referencia y pruebas automatizadas
+};
+
+\node[block, below=of validation] (artifacts) {
+    \textbf{Generación de artefactos}\\
+    CSV, JSON, resumen Markdown, figura comparativa y notebook
+};
+
+\draw[arrow] (reference) -- (milp);
+\draw[arrow] (milp) -- (paired);
+\draw[arrow] (paired) -- (activity);
+\draw[arrow] (activity) -- (search);
+\draw[arrow] (search) -- (validation);
+\draw[arrow] (validation) -- (artifacts);
+
+\end{tikzpicture}
