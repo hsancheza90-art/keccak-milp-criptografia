@@ -1,0 +1,7 @@
+﻿z,rounds,attempts_range,sboxes_per_round,result_status,minimum_exact,lower_bound,upper_bound,witness_activity,search_family,method,evaluated_realizations,elapsed_seconds,solver
+4,1,<10,20,exact,1,1,1,1,global,mathematical lower bound + constructed MILP witness,,,CBC
+4,2,<20,20,exact,4,4,4,2+2,global,exhaustive differential search + constructed MILP witness,182590,,CBC
+4,3,<30,20,bounded,,5,13,2+2+9,restricted 2+2+c,exhaustive restricted search + constructed MILP witness,204800,,CBC
+8,1,<10,40,exact,1,1,1,1,global,mathematical lower bound + constructed MILP witness,,,CBC
+8,2,<20,40,exact,4,4,4,2+2,global,exhaustive differential search + constructed MILP witness,749580,,CBC
+8,3,<30,40,bounded,,5,14,2+2+10,restricted 2+2+c,exhaustive restricted search + constructed MILP witness,409600,,CBC

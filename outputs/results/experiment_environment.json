@@ -1,0 +1,45 @@
+{
+  "generated_at_utc": "2026-07-27T14:45:44.964647+00:00",
+  "mode": "quick",
+  "selected_z": [
+    4,
+    8
+  ],
+  "total_elapsed_seconds": 2e-05,
+  "python": {
+    "version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "executable": "D:\\venvs\\keccak-milp\\Scripts\\python.exe"
+  },
+  "platform": {
+    "system": "Windows",
+    "release": "10",
+    "version": "10.0.19045",
+    "machine": "AMD64",
+    "processor": "AMD64 Family 23 Model 8 Stepping 2, AuthenticAMD"
+  },
+  "packages": {
+    "numpy": "2.5.1",
+    "pulp": "3.3.2",
+    "pytest": "9.1.1"
+  },
+  "solvers": {
+    "selected": "PULP_CBC_CMD",
+    "available": [
+      "PULP_CBC_CMD",
+      "COIN_CMD"
+    ],
+    "cbc_available": true
+  },
+  "git": {
+    "branch": "feature/chi-milp",
+    "commit": "47dd411dae55f434af6034c86e5187a756486040",
+    "commit_short": "47dd411",
+    "working_tree_clean": false,
+    "changed_files": [
+      "?? outputs/",
+      "?? scripts/run_active_sbox_experiments.py",
+      "?? src/keccak_milp/active_sbox_search.py",
+      "?? tests/test_active_sbox_search.py"
+    ]
+  }
+}
