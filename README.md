@@ -35,23 +35,23 @@ diferencias mediante restricciones XOR exactas.
 
 El estado de Keccak se representa como:
 
-$$
-A[x,y,k] \in \{0,1\},
-$$
+```math
+A[x,y,k] \in \{0,1\}
+```
 
 con:
 
-$$
+```math
 x,y \in \{0,\ldots,4\},
 \qquad
-k \in \{0,\ldots,z-1\}.
-$$
+k \in \{0,\ldots,z-1\}
+```
 
 El tamaño total del estado es:
 
-$$
-25z \text{ bits}.
-$$
+```math
+25z \text{ bits}
+```
 
 Las configuraciones evaluadas son:
 
@@ -87,68 +87,68 @@ propia del estándar.
 
 El modelo contiene dos ejecuciones del estado:
 
-$$
+```math
 A_r^L
 \qquad \text{y} \qquad
-A_r^R.
-$$
+A_r^R
+```
 
 La diferencia se calcula mediante:
 
-$$
-\Delta A_r = A_r^L \oplus A_r^R.
-$$
+```math
+\Delta A_r = A_r^L \oplus A_r^R
+```
 
 Para una XOR binaria:
 
-$$
-d = u \oplus v,
-$$
+```math
+d = u \oplus v
+```
 
 se introduce una variable auxiliar binaria $q$ y se impone:
 
-$$
-u+v=d+2q.
-$$
+```math
+u+v=d+2q
+```
 
 La capa $\chi$ se representa exactamente mediante la linealización del
 producto binario presente en su función booleana.
 
 Para cada ronda $r$ y posición local $(y,k)$ se define:
 
-$$
-a_{r,y,k} \in \{0,1\},
-$$
+```math
+a_{r,y,k} \in \{0,1\}
+```
 
 donde:
 
-$$
+```math
 a_{r,y,k}
 =
 \bigvee_{x=0}^{4}
-\Delta B_r[x,y,k].
-$$
+\Delta B_r[x,y,k]
+```
 
 La función objetivo minimiza la actividad total:
 
-$$
+```math
 \min
 \sum_{r=0}^{R-1}
 \sum_{y=0}^{4}
 \sum_{k=0}^{z-1}
-a_{r,y,k}.
-$$
+a_{r,y,k}
+```
 
 También se impone una diferencia inicial no nula para evitar la solución
 trivial:
 
-$$
+```math
 \sum_{x=0}^{4}
 \sum_{y=0}^{4}
 \sum_{k=0}^{z-1}
 \Delta A_{0,x,y,k}
-\geq 1.
-$$
+\geq 1
+```
 
 ---
 
@@ -165,69 +165,69 @@ $$
 
 ### Una ronda
 
-$$
+```math
 N_{\mathrm{act}}^{\min}(4,1)
 =
 N_{\mathrm{act}}^{\min}(8,1)
 =
-1.
-$$
+1
+```
 
 ### Dos rondas
 
-$$
+```math
 N_{\mathrm{act}}^{\min}(4,2)
 =
 N_{\mathrm{act}}^{\min}(8,2)
 =
-4.
-$$
+4
+```
 
 Los testigos óptimos presentan la distribución:
 
-$$
-2+2.
-$$
+```math
+2+2
+```
 
 ### Tres rondas
 
-$$
+```math
 5
 \leq
 N_{\mathrm{act}}^{\min}(4,3)
 \leq
-13,
-$$
+13
+```
 
 y:
 
-$$
+```math
 5
 \leq
 N_{\mathrm{act}}^{\min}(8,3)
 \leq
-14.
-$$
+14
+```
 
 Los mejores testigos tienen distribuciones:
 
-$$
+```math
 2+2+9
-$$
+```
 
 para $z=4$, y:
 
-$$
+```math
 2+2+10
-$$
+```
 
 para $z=8$.
 
 Los valores 13 y 14 son óptimos dentro de la familia restringida:
 
-$$
-2+2+c,
-$$
+```math
+2+2+c
+```
 
 pero no constituyen mínimos globales certificados para el espacio completo
 de tres rondas.
@@ -243,16 +243,16 @@ de tres rondas.
 
 Cada S-box de cinco bits admite:
 
-$$
+```math
 2^5=32
-$$
+```
 
 valores absolutos posibles. Al existir dos S-boxes activas en la segunda
 ronda, se evalúan:
 
-$$
+```math
 32^2=1024
-$$
+```
 
 realizaciones por trayectoria.
 
@@ -287,7 +287,7 @@ El proyecto cuenta actualmente con:
 
 ## Estructura del repositorio
 
-~~~text
+```text
 PracticaCalificada/
 │
 ├── src/
@@ -332,7 +332,7 @@ PracticaCalificada/
 ├── requirements.txt
 ├── .gitignore
 └── README.md
-~~~
+```
 
 ---
 
@@ -342,14 +342,22 @@ Se recomienda utilizar Python 3.12 y un entorno virtual.
 
 En PowerShell:
 
-~~~powershell
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-~~~
+```
 
-La implementación utiliza Python, NumPy, PuLP, CBC y pytest.
+La implementación utiliza:
+
+- Python.
+- NumPy.
+- PuLP.
+- CBC.
+- pytest.
+
+CBC se invoca mediante la interfaz de PuLP.
 
 ---
 
@@ -357,15 +365,18 @@ La implementación utiliza Python, NumPy, PuLP, CBC y pytest.
 
 Desde la raíz del repositorio:
 
-~~~powershell
+```powershell
 python -m pytest -q --disable-warnings
-~~~
+```
 
 Resultado esperado:
 
-~~~text
+```text
 245 passed
-~~~
+```
+
+Las advertencias actuales de PuLP corresponden principalmente a interfaces
+marcadas para futura obsolescencia y no a fallos en los resultados.
 
 ---
 
@@ -373,15 +384,21 @@ Resultado esperado:
 
 ### Modo rápido
 
-~~~powershell
+```powershell
 python scripts/run_active_sbox_experiments.py --mode quick
-~~~
+```
+
+Este modo regenera tablas, archivos CSV y JSON, la figura comparativa y los
+artefactos permanentes sin repetir las búsquedas más costosas.
 
 ### Modo completo
 
-~~~powershell
+```powershell
 python scripts/run_active_sbox_experiments.py --mode full
-~~~
+```
+
+Este modo procesa nuevamente las 204 800 realizaciones de $z=4$ y las
+409 600 realizaciones de $z=8$.
 
 ---
 
@@ -389,23 +406,28 @@ python scripts/run_active_sbox_experiments.py --mode full
 
 Desde la carpeta `report/`:
 
-~~~powershell
+```powershell
 latexmk `
     -pdf `
     -interaction=nonstopmode `
     -halt-on-error `
     -file-line-error `
     main.tex
-~~~
+```
 
 También puede utilizarse:
 
-~~~powershell
+```powershell
 .\build.ps1
-~~~
+```
 
-La bibliografía se gestiona mediante `biblatex` y Biber. El documento
-compilado se encuentra en `report/main.pdf`.
+La bibliografía se gestiona mediante `biblatex` y Biber.
+
+El documento compilado se encuentra en:
+
+```text
+report/main.pdf
+```
 
 ---
 
@@ -424,9 +446,9 @@ Los resultados se validan mediante:
 
 La versión experimental de referencia está identificada mediante la etiqueta:
 
-~~~text
+```text
 keccak-milp-experiments-v1
-~~~
+```
 
 ---
 
@@ -434,9 +456,9 @@ keccak-milp-experiments-v1
 
 Los resultados corresponden a Keccak reducido con:
 
-$$
+```math
 z\in\{4,8\}
-$$
+```
 
 y un máximo de tres rondas.
 
@@ -469,6 +491,6 @@ El modelo actual no calcula directamente:
 
 El informe académico completo se encuentra en:
 
-~~~text
+```text
 report/main.pdf
-~~~
+```
