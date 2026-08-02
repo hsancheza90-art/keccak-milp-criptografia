@@ -13,11 +13,15 @@ from typing import Final, Literal, cast
 import numpy as np
 from numpy.typing import NDArray
 
+from keccak_milp.diffusion import (
+    linear_layer_final_case,
+)
 from keccak_milp.layers import (
     iota,
     round_constant,
     validate_state_shape,
 )
+from keccak_milp.nonlinear import chi_star
 
 
 SecurityLevel = Literal[0, 1, 2]
@@ -334,7 +338,148 @@ def iota_final_case(
 
     return output
 
+def _validate_final_case_state(
+    state: NDArray[np.integer],
+) -> int:
+    """
+    Valida un estado utilizado por la permutación final.
+
+    El caso final admite únicamente los tamaños reducidos z=4 y z=8.
+    """
+
+    z = validate_state_shape(state)
+
+    _validate_word_size(z)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La permutación del caso final requiere "
+            "un estado binario."
+        )
+
+    return z
+
+
+def keccak_round_final_case(
+    state: NDArray[np.integer],
+    round_index: object,
+    security_level: object,
+    domain_id: object,
+) -> NDArray[np.int64]:
+    """
+    Ejecuta una ronda de la variante final de Keccak reducido.
+
+    El orden de las transformaciones es:
+
+        L* -> Chi* -> Iota*
+
+    donde:
+
+        L*    = mu o pi o rho o theta
+        Chi*  = S-box cuadrática APN de cinco bits
+        Iota* = constante oficial más separación dinámica
+
+    El índice de ronda debe pertenecer al intervalo determinado por
+    ``security_level``. La función no modifica el estado de entrada.
+    """
+
+    _validate_final_case_state(state)
+
+    validated_security_level = validate_security_level(
+        security_level
+    )
+
+    validated_domain_id = validate_domain_id(
+        domain_id
+    )
+
+    validated_round_index = _validate_plain_integer(
+        round_index,
+        "round_index",
+    )
+
+    number_of_rounds = security_level_to_rounds(
+        validated_security_level
+    )
+
+    if validated_round_index not in range(number_of_rounds):
+        raise ValueError(
+            "El índice de ronda debe encontrarse entre 0 y "
+            f"{number_of_rounds - 1} para security_level="
+            f"{validated_security_level}."
+        )
+
+    after_linear = linear_layer_final_case(
+        state
+    )
+
+    after_nonlinear = chi_star(
+        after_linear
+    )
+
+    return iota_final_case(
+        after_nonlinear,
+        round_index=validated_round_index,
+        security_level=validated_security_level,
+        domain_id=validated_domain_id,
+    )
+
+
+def keccak_rounds_final_case(
+    state: NDArray[np.integer],
+    security_level: object,
+    domain_id: object,
+) -> NDArray[np.int64]:
+    """
+    Ejecuta la permutación reducida completa del caso final.
+
+    El número de rondas depende del nivel público de seguridad:
+
+        security_level=0 -> 1 ronda
+        security_level=1 -> 2 rondas
+        security_level=2 -> 3 rondas
+
+    Cada ronda aplica:
+
+        L* -> Chi* -> Iota*
+
+    La función devuelve una copia transformada y no modifica el estado
+    proporcionado por el usuario.
+    """
+
+    _validate_final_case_state(state)
+
+    validated_security_level = validate_security_level(
+        security_level
+    )
+
+    validated_domain_id = validate_domain_id(
+        domain_id
+    )
+
+    number_of_rounds = security_level_to_rounds(
+        validated_security_level
+    )
+
+    current = state.astype(
+        np.int64,
+        copy=True,
+    )
+
+    for round_index in range(number_of_rounds):
+        current = keccak_round_final_case(
+            current,
+            round_index=round_index,
+            security_level=validated_security_level,
+            domain_id=validated_domain_id,
+        )
+
+    return current
+
+
 __all__ = [
+    "keccak_round_final_case",
+    "keccak_rounds_final_case",
     "DomainId",
     "dynamic_parameter_constant",
     "iota_final_case",
