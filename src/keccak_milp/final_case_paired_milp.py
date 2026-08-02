@@ -912,6 +912,26 @@ class FinalCasePairedMILPModel:
                 "solver debe ser una instancia de pulp.LpSolver."
             )
 
+        if (
+            self._fixed_left_input is not None
+            and self._fixed_right_input is not None
+            and (
+                self._fixed_left_input
+                == self._fixed_right_input
+            )
+        ):
+            self.problem.status = (
+                pulp.LpStatusInfeasible
+            )
+
+            self.problem.sol_status = (
+                pulp.LpSolutionInfeasible
+            )
+
+            return pulp.LpStatus[
+                self.problem.status
+            ]
+
         self.problem.solve(
             solver
         )

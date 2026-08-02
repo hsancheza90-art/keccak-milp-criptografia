@@ -722,6 +722,7 @@ def test_paired_model_matches_functional_reference(
 def test_identical_inputs_are_infeasible(
     z: int,
     solver: pulp.LpSolver,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng = np.random.default_rng(
         134000 + z
@@ -753,9 +754,35 @@ def test_identical_inputs_are_infeasible(
         state.copy()
     )
 
+    def fail_if_solver_is_called(
+        supplied_solver: object,
+    ) -> None:
+        del supplied_solver
+
+        raise AssertionError(
+            "CBC no debe invocarse "
+            "para entradas idénticas."
+        )
+
+    monkeypatch.setattr(
+        model.problem,
+        "solve",
+        fail_if_solver_is_called,
+    )
+
     assert model.solve(
         solver
     ) == "Infeasible"
+
+    assert (
+        model.problem.status
+        == pulp.LpStatusInfeasible
+    )
+
+    assert (
+        model.problem.sol_status
+        == pulp.LpSolutionInfeasible
+    )
 
 
 @pytest.mark.parametrize(
