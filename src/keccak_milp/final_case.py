@@ -10,6 +10,15 @@ from __future__ import annotations
 
 from typing import Final, Literal, cast
 
+import numpy as np
+from numpy.typing import NDArray
+
+from keccak_milp.layers import (
+    iota,
+    round_constant,
+    validate_state_shape,
+)
+
 
 SecurityLevel = Literal[0, 1, 2]
 DomainId = Literal[0, 1, 2, 3]
@@ -194,8 +203,141 @@ def encode_dynamic_parameters(
     return encoded
 
 
+def _rotate_lane_value(
+    value: int,
+    offset: int,
+    z: int,
+) -> int:
+    """Rota circularmente un valor limitado a z bits."""
+
+    mask = (1 << z) - 1
+    masked_value = value & mask
+    normalized_offset = offset % z
+
+    if normalized_offset == 0:
+        return masked_value
+
+    return (
+        (
+            masked_value << normalized_offset
+        )
+        |
+        (
+            masked_value
+            >> (z - normalized_offset)
+        )
+    ) & mask
+
+
+def dynamic_parameter_constant(
+    round_index: object,
+    security_level: object,
+    domain_id: object,
+    z: object,
+) -> int:
+    """
+    Construye la constante pública del caso final.
+
+    Primero se codifican los parámetros mediante:
+
+        E(s, d) = 4 * (s + 1) + d
+
+    Después se aplica una rotación circular dependiente de la ronda:
+
+        D_r = ROTL_z(E(s, d), r mod z)
+
+    La llamada a ``round_constant`` reutiliza la validación del índice
+    de ronda de la implementación V1.
+    """
+
+    validated_round_index = _validate_plain_integer(
+        round_index,
+        "round_index",
+    )
+
+    validated_z = _validate_word_size(z)
+
+    # Reutiliza la validación de rango de la V1.
+    _ = round_constant(
+        validated_round_index,
+        validated_z,
+    )
+
+    encoded = encode_dynamic_parameters(
+        security_level,
+        domain_id,
+        validated_z,
+    )
+
+    return _rotate_lane_value(
+        encoded,
+        validated_round_index,
+        validated_z,
+    )
+
+
+def iota_final_case(
+    state: NDArray[np.integer],
+    round_index: object,
+    security_level: object,
+    domain_id: object,
+) -> NDArray[np.int64]:
+    """
+    Aplica la capa iota modificada del caso final.
+
+    La constante oficial de Keccak se conserva en el lane ``A[0, 0]``.
+    La constante pública dinámica se inyecta en ``A[1, 0]``.
+
+    Formalmente:
+
+        A'[0, 0] = A[0, 0] XOR RC_r
+
+        A'[1, 0] =
+            A[1, 0] XOR ROTL_z(E(s, d), r mod z)
+
+    Los otros 23 lanes no reciben constantes adicionales.
+
+    La función no modifica el estado de entrada.
+    """
+
+    z = validate_state_shape(state)
+
+    if not np.all(np.isin(state, [0, 1])):
+        raise ValueError(
+            "La capa iota del caso final requiere "
+            "un estado binario."
+        )
+
+    validated_round_index = _validate_plain_integer(
+        round_index,
+        "round_index",
+    )
+
+    parameter_constant = dynamic_parameter_constant(
+        validated_round_index,
+        security_level,
+        domain_id,
+        z,
+    )
+
+    output = iota(
+        state,
+        round_index=validated_round_index,
+    )
+
+    for k in range(z):
+        parameter_bit = (
+            parameter_constant >> k
+        ) & 1
+
+        output[1, 0, k] ^= parameter_bit
+
+    return output
+
 __all__ = [
     "DomainId",
+    "dynamic_parameter_constant",
+    "iota_final_case",
     "SECURITY_LEVEL_ROUNDS",
     "SUPPORTED_DOMAIN_IDS",
     "SUPPORTED_SECURITY_LEVELS",
